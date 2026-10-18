@@ -286,9 +286,12 @@
   .leg.cat-yukyu   .ct{color:var(--provisional);}
   .leg.cat-zangyo  .ct{color:var(--rail-accent);}
 
-  .homefeedcard{padding:0;}
+  /* ホームの一覧は他タブの大きな表と違い項目数が少ないため、.sheet由来のoverflow:auto；
+     max-height:70vhを打ち消して内部スクロール（見づらい縦スライダー）を無くし、
+     ページ全体のスクロールに任せる（ユーザー指摘：「スライダーがあると見づらい」） */
+  .homefeedcard{padding:0; overflow:visible; max-height:none;}
   .homefeedhead{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;
-    padding:16px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; background:var(--panel);}
+    padding:16px 18px; border-bottom:1px solid var(--line); background:var(--panel);}
   .homefeedhead h2{margin:0; font-family:var(--display); font-weight:900; font-size:15px; color:var(--ink);}
   .feedcount{font-family:var(--mono); font-size:11.5px; color:var(--dim);}
   .homefeedactions{display:flex; align-items:center; gap:12px;}
