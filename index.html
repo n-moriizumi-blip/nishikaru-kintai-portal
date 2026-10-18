@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勤怠管理ポータル（西軽精機）</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1F3A52">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@900&family=Zen+Old+Mincho:wght@700&family=BIZ+UDGothic:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  /* ============================================================
+     方向性：精密検査票の罫線グリッド（白地の紙に近い明るさ）をベースに、
+     承認状況は朱肉のハンコ風スタンプで示す。ナビ（アイコンレール）と
+     一覧の見出し行だけは工場管制盤を思わせる濃紺にして締まりを出す。
+     見出し書体はZen Kaku Gothic New、スタンプはZen Old Mincho。
+     （2026-10-17、モックアップでの検討・選定を経て実装）
+
+     【2026-10-17】当初GAS（script.google.com）から直接配信する構成で実装したが、
+     GASのWebアプリは実際にはscript.googleusercontent.com系のサンドボックスiframe内に
+     表示される仕様で、このドメインはGoogle側の制約でOAuthクライアントの
+     「承認済みのJavaScript生成元」に登録できないことが判明（Googleログインが
+     origin_mismatchで失敗）。勤怠申請アプリ（shuusei-app）と同じGitHub Pages
+     （既に承認済みのオリジン）から配信する構成に変更した。データ取得・承認操作は
+     既存のWeb App（GAS側のmode=portalShinseiList・action=updateShinseiStatus）を
+     そのままfetchで呼ぶため、ロジック自体に変更はない
+     ============================================================ */
+  :root{
+    --bg:#F3F1EA; --panel:#FFFFFF; --field:#F7F5EF; --line:#D9D4C4; --ink:#1E1C16; --dim:#847C68;
+    --rail:#1F3A52; --rail-field:#2B4D6B; --rail-hover:#294660; --rail-ink:#F2EDE0; --rail-dim:#A9BBC8; --rail-accent:#E0A23D;
+    --pending:#B8862F; --provisional:#2E7A8C; --approved:#1E6E4E; --denied:#B23A2E; --mistake:#7A3350;
+    --display:"Zen Kaku Gothic New",sans-serif; --stamp:"Zen Old Mincho",serif;
+    --body:"BIZ UDGothic","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif; --mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--body);
+  }
+
+  /* ── ログイン画面 ── */
+  #loginScreen{min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;}
+  .logincard{width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    overflow:hidden; box-shadow:0 2px 0 var(--line);}
+  .logincard .lhead{background:var(--rail); color:var(--rail-ink); padding:22px 20px; text-align:center;}
+  .logincard .lhead .mark{width:40px; height:40px; border-radius:8px; background:var(--rail-field); margin:0 auto 10px;
+    display:flex; align-items:center; justify-content:center; font-family:var(--display); font-weight:900; font-size:17px;
+    color:var(--rail-accent);}
+  .logincard .lhead h1{font-family:var(--display); font-weight:900; font-size:16px; margin:0 0 4px;}
+  .logincard .lhead p{font-size:12px; color:var(--rail-dim); margin:0;}
+  .logincard .lbody{padding:22px 20px; display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .logincard .lnote{font-size:12px; color:var(--dim); text-align:center; line-height:1.6;}
+  #denied{display:none; font-size:13px; color:var(--denied); text-align:center; line-height:1.7;}
+  #loadingNote{display:none; font-size:12.5px; color:var(--dim); text-align:center;}
+
+  /* 2026-10-17修正：以前は.app（画面全体）にマウスが乗るだけでレールが展開してしまい、
+     かつ展開後の幅がグリッド枠を無視して本文と重なっていた。レール自体を position:fixed で
+     浮かせ、レールにマウスが乗った時だけ本文の上に重ねて展開する方式に変更。
+     .rail-spacerが常に64px分の余白を確保するので、本文側は展開の影響を受けない */
+  .app{display:none; min-height:100%;}
+  .app.show{display:flex;}
+  .rail-spacer{width:64px; flex-shrink:0;}
+  .rail{background:var(--rail); border-right:1px solid #16293A; overflow:hidden; width:64px; transition:width .16s ease;
+    position:fixed; top:0; left:0; bottom:0; z-index:50;}
+  .rail:hover{width:220px; box-shadow:6px 0 22px rgba(0,0,0,.22);}
+  .rail-inner{width:220px; padding:16px 10px; height:100%; display:flex; flex-direction:column;}
+  .rail .brand{display:flex; align-items:center; gap:10px; padding:0 8px; margin-bottom:22px; white-space:nowrap;}
+  .rail .brand .mark{width:30px; height:30px; border-radius:6px; background:var(--rail-field); border:1px solid rgba(255,255,255,.16);
+    display:flex; align-items:center; justify-content:center; font-family:var(--display); font-weight:900; font-size:13px; color:var(--rail-accent);
+    flex-shrink:0;}
+  .rail .brand .tx{font-family:var(--display); font-weight:900; font-size:11.5px; line-height:1.5; color:var(--rail-ink);}
+  .rail .brand .tx small{display:block; font-size:9px; color:var(--rail-dim); font-family:var(--body); font-weight:700;}
+  .rail nav{display:flex; flex-direction:column; gap:3px;}
+  .rail button{display:flex; align-items:center; gap:13px; background:none; border:none; color:var(--rail-dim);
+    font-family:var(--body); font-size:13px; font-weight:700; padding:10px 9px; border-radius:7px; cursor:pointer;
+    text-align:left; white-space:nowrap; width:200px;}
+  .rail button .ic{width:18px; text-align:center; font-size:14px; flex-shrink:0; filter:grayscale(1); opacity:.6;}
+  .rail button.active{background:var(--rail-field); color:var(--rail-ink);}
+  .rail button.active .ic{filter:none; opacity:1;}
+  .rail button:hover:not(.active){background:var(--rail-hover); color:var(--rail-ink);}
+  .rail .who{margin-top:auto; padding:12px 9px 2px; font-size:10.5px; color:var(--rail-dim); border-top:1px solid rgba(255,255,255,.14);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  .main{flex:1; min-width:0; padding:22px 24px 60px;}
+  .pagehead{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+  .pagehead h1{font-family:var(--display); font-weight:900; font-size:18px; margin:0; color:var(--ink);}
+  .pagehead .sub{font-size:11.5px; color:var(--dim); font-family:var(--mono);}
+
+  .stub{background:var(--panel); border:1px dashed var(--line); border-radius:10px; padding:48px 20px; text-align:center;
+    color:var(--dim); font-size:13.5px;}
+  .stub b{display:block; font-family:var(--display); font-weight:900; font-size:15px; color:var(--ink); margin-bottom:8px;}
+
+  /* ── フィルターバー ── */
+  .filterbar{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+    display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px;}
+  .f{display:flex; flex-direction:column; gap:4px;}
+  .f label{font-size:10px; font-weight:700; color:var(--dim); letter-spacing:.06em; text-transform:uppercase;
+    font-family:var(--mono);}
+  .f input, .f select{background:var(--field); border:1px solid var(--line); border-radius:5px; padding:8px 10px;
+    font-size:13px; font-family:var(--body); color:var(--ink); min-width:150px;}
+  .f.grow{flex:1; min-width:200px;}
+  .f.grow input, .f.grow select{width:100%;}
+  .pills{display:flex; gap:6px; flex-wrap:wrap;}
+  .pill{font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:5px; cursor:pointer; border:1px solid var(--line);
+    background:var(--field); color:var(--dim); font-family:var(--mono);}
+  .pill[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  .resultcount{font-size:11.5px; color:var(--dim); margin:0 0 10px 2px; font-family:var(--mono);}
+  .refreshbtn{font-family:var(--mono); font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:5px;
+    border:1px solid var(--line); background:var(--field); color:var(--dim); cursor:pointer;}
+
+  /* ── 検査票グリッド ── */
+  .sheet{background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:auto; max-height:70vh;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:center; font-size:10px; font-weight:700; color:var(--rail-ink); padding:10px 12px; letter-spacing:.07em;
+    text-transform:uppercase; font-family:var(--mono); border-bottom:1.5px solid #16293A; background:var(--rail);
+    white-space:nowrap; position:sticky; top:0; z-index:2; border-right:1px solid rgba(255,255,255,.14);}
+  thead th:last-child{border-right:none;}
+  tbody tr{border-bottom:1px solid var(--line); cursor:pointer;}
+  tbody tr:last-child{border-bottom:none;}
+  tbody tr:hover{background:var(--bg);}
+  td{padding:10px 12px; vertical-align:middle; border-right:1px solid var(--line); text-align:center;}
+  td:last-child{border-right:none;}
+  /* 備考・メッセージ内容・詳細等、長くなりがちな自由記述列だけ左詰め（ユーザー指示：
+     「基本的には中央揃え、左詰めの方が見やすいものだけ左詰め」） */
+  td.txtleft, th.txtleft{text-align:left;}
+  /* ── 打刻確認：日付・曜日列を横スクロールでも固定表示（leftはJSで実測して設定） ── */
+  .dk-col0, .dk-col1{position:sticky; z-index:1; border-right:1.5px solid #999999;}
+  .dk-corner{position:sticky; z-index:4; border-right:1.5px solid #16293A;}
+  /* 社員ごとの3列ブロックの境目を太めの縦線で区切る（実シートと同じ#666666。
+     ユーザー指摘：「打刻確認がなんか見づらい」への対応） */
+  .emp-end{border-right:2px solid #666666;}
+  /* マス目が社員ごとにバラバラな幅になって不揃いに見えていたため（備考列の文字数で
+     列幅が社員ごとに変わってしまっていた）、colgroupで列幅を固定して揃える */
+  #dakokukakunin-table{table-layout:fixed; width:auto;}
+  #dakokukakunin-table td, #dakokukakunin-table th{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  /* ── 月次集計・週別実働：氏名列を横スクロールでも固定表示 ── */
+  .stickyname{position:sticky; left:0; z-index:1; background:var(--panel); border-right:1.5px solid #999999;}
+  .stickyname-head{position:sticky; left:0; z-index:4; border-right:1.5px solid #16293A;}
+  td.mono{font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--dim); font-size:12.5px;}
+  td.name{font-weight:700; color:var(--ink);}
+  /* 項目の意味的なまとまりを区切る太めの縦線（例：36協定の基本情報/年間累計/当月指標） */
+  .zone-end{border-right:2px solid #8a8a8a;}
+  /* 有給管理：通常有給/積立有給の列グループを色分け */
+  td.yukyu-normal{background:#EAF1FB;}
+  td.yukyu-tsumitate{background:#FDF1E3;}
+  /* 36協定：年間累計指標/当月指標の列グループを色分け */
+  td.z36-nenkan{background:#EAF1FB;}
+  td.z36-tsukigetsu{background:#FDF1E3;}
+  .emptystate{padding:40px 20px; text-align:center; color:var(--dim); font-size:13px;}
+
+  /* ── ハンコ風スタンプ ── */
+  .stamp{
+    font-family:var(--stamp); font-weight:700; font-size:11.5px; display:inline-flex; align-items:center;
+    justify-content:center; width:42px; height:42px; border-radius:50%; border:2px solid; transform:rotate(-7deg);
+    writing-mode:vertical-rl; letter-spacing:1px; background:rgba(0,0,0,.02);
+  }
+  .stamp.pending{border-color:var(--pending); color:var(--pending);}
+  .stamp.provisional{border-color:var(--provisional); color:var(--provisional);}
+  .stamp.approved{border-color:var(--approved); color:var(--approved);}
+  .stamp.denied{border-color:var(--denied); color:var(--denied);}
+  /* ── 申請一覧・修正依頼：行全体も状況の色で薄く塗って、パッと見で分かるようにする
+     （ユーザー指摘：「ステータスが分かりずらい」。.resolvedbadgeと同じ赤/緑の濃さに揃えた） ── */
+  tr.row-pending{border-left:4px solid var(--pending); background:#F5E6C7;}
+  tr.row-provisional{border-left:4px solid var(--provisional); background:#D4E9ED;}
+  tr.row-approved{border-left:4px solid var(--approved); background:#D3ECDE;}
+  tr.row-denied{border-left:4px solid var(--denied); background:#F6D3CF;}
+
+  /* ── 打刻種別の色分け（打刻ログシートの出勤=緑/退勤=青/外出=黄/帰社=紫と同じ濃さ） ── */
+  tr.type-shukkin{border-left:4px solid #274E13; background:#D9EAD3;}
+  tr.type-taikin{border-left:4px solid #1F4E79; background:#D0E4F5;}
+  tr.type-gaishutsu{border-left:4px solid #7F6000; background:#FFF2CC;}
+  tr.type-kisha{border-left:4px solid #4A235A; background:#EAD1DC;}
+  tr.type-shukkin td:first-child, tr.type-taikin td:first-child,
+  tr.type-gaishutsu td:first-child, tr.type-kisha td:first-child{padding-left:9px;}
+
+  .rowbtns{display:flex; gap:6px;}
+  .rb{font-family:var(--mono); font-size:11px; font-weight:700; padding:5px 11px; border-radius:5px;
+    border:1px solid var(--line); cursor:pointer; background:var(--field); color:var(--dim);}
+  .rb:disabled{opacity:.5; cursor:default;}
+  .rb.go:hover{border-color:var(--approved); color:var(--approved);}
+  .rb.stop:hover{border-color:var(--denied); color:var(--denied);}
+  .rb.back:hover{border-color:var(--pending); color:var(--pending);}
+
+  /* ── 詳細ドロワー ── */
+  .drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:20; opacity:0; pointer-events:none;
+    transition:opacity .15s ease;}
+  .drawer-backdrop.open{opacity:1; pointer-events:auto;}
+  .drawer{position:fixed; top:0; right:0; bottom:0; width:min(380px, 92vw); background:var(--panel);
+    border-left:1px solid var(--line); z-index:21; transform:translateX(100%); transition:transform .18s ease;
+    padding:22px 20px; overflow-y:auto;}
+  .drawer.open{transform:translateX(0);}
+  .drawer-close{background:none; border:none; font-size:12.5px; color:var(--dim); cursor:pointer; padding:4px 0;
+    margin-bottom:10px; font-family:var(--mono);}
+  .drawer h2{font-family:var(--display); font-weight:900; font-size:16px; color:var(--ink); margin:4px 0 2px;}
+  .drawer .appid{font-family:var(--mono); font-size:11.5px; color:var(--dim); margin-bottom:16px;}
+  .drawer dt{font-size:10px; color:var(--dim); margin-top:13px; font-family:var(--mono); text-transform:uppercase;
+    letter-spacing:.05em;}
+  .drawer dd{margin:3px 0 0; font-size:14px; font-weight:700; color:var(--ink);}
+  .drawer .reason{background:var(--field); border:1px solid var(--line); border-radius:6px; padding:10px 12px;
+    font-size:13px; line-height:1.6; margin-top:3px; color:var(--ink); white-space:pre-wrap;}
+  .drawer-actions{display:flex; gap:8px; margin-top:20px;}
+  .drawer-actions button{flex:1; padding:11px; border-radius:7px; border:1px solid var(--line); font-weight:700;
+    font-size:13.5px; cursor:pointer; font-family:var(--body);}
+  .drawer-actions button:disabled{opacity:.5; cursor:default;}
+  .drawer-actions .go{background:var(--approved); color:#06241A; border-color:var(--approved);}
+  .drawer-actions .stop{background:var(--field); color:var(--denied); border-color:var(--denied);}
+  .drawer-actions .back{background:var(--field); color:var(--pending); border-color:var(--pending);}
+
+  /* ── 月次集計・36協定 ── */
+  td.warn-bad{color:var(--denied); font-weight:700;}
+  td.warn-caution{color:var(--pending); font-weight:700;}
+  .monthgrid{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:16px;}
+  .monthgrid .mbox{background:var(--field); border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-align:center;}
+  .monthgrid .mbox.current{border-color:var(--rail); background:#EAF0F4;}
+  .monthgrid .mbox .ml{font-size:10px; color:var(--dim); font-family:var(--mono);}
+  .monthgrid .mbox .mv{font-family:var(--mono); font-size:14px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;}
+
+  /* ── 特別休暇管理（特別休暇管理シートのTOKUBETSU_KANRI_COLORと同じ配色） ── */
+  tr.tk-keiji{border-left:4px solid #880E4F; background:#FCE4EC;}
+  tr.tk-choji{border-left:4px solid #37474F; background:#ECEFF1;}
+  tr.tk-shobyo{border-left:4px solid #E65100; background:#FFF3E0;}
+  tr.tk-tsumitate{border-left:4px solid #01579B; background:#E1F5FE;}
+  .choukabadge{font-size:11px; font-weight:700; color:var(--denied); background:var(--field);
+    border:1px solid var(--denied); border-radius:999px; padding:2px 9px;}
+
+  /* ── 伝言板（applyDengonbanColorと同じ配色。表示＝未確認・済＝確認済み） ── */
+  tr.dg-hyouji{border-left:4px solid #7F6000; background:#FFF2CC;}
+  tr.dg-sumi{border-left:4px solid #274E13; background:#D9EAD3;}
+  .dgbadge{font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; font-family:var(--mono);}
+  .dgbadge.hyouji{color:#7F6000; background:#fff; border:1px solid #7F6000;}
+  .dgbadge.sumi{color:#274E13; background:#fff; border:1px solid #274E13;}
+  .newbtn{font-family:var(--mono); font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:5px;
+    border:1px solid var(--approved); background:var(--approved); color:#06241A; cursor:pointer;}
+  .composer-field{display:flex; flex-direction:column; gap:4px; margin-top:14px;}
+  .composer-field label{font-size:10px; font-weight:700; color:var(--dim); letter-spacing:.06em;
+    text-transform:uppercase; font-family:var(--mono);}
+  .composer-field select, .composer-field input, .composer-field textarea{background:var(--field);
+    border:1px solid var(--line); border-radius:5px; padding:9px 10px; font-size:13.5px; font-family:var(--body);
+    color:var(--ink); width:100%;}
+  .composer-field textarea{resize:vertical; min-height:90px; line-height:1.6; font-family:var(--body);}
+
+  /* ── ホーム ── */
+  .sheetlink{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--rail);}
+
+  /* ── ホーム（2026-10-18 全面リデザイン：判定印＋内訳バー＋統合一覧。元のホームシートの
+     構成（スタンプ横並び＋別々のカード）には縛られず作り直した。ユーザー要望：
+     「全く新しく使いやすく見やすくおしゃれに」） ── */
+  .homehero{display:flex; flex-wrap:wrap; gap:20px; margin-bottom:20px; align-items:stretch;}
+  .homeseal{flex:0 0 auto; width:196px; background:var(--panel); border:1px solid var(--line); border-radius:4px;
+    padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;}
+  .sealring{width:112px; height:112px; border-radius:50%; border:4px solid var(--denied); transform:rotate(-5deg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; transition:border-color .15s;}
+  .homeseal.ok .sealring{border-color:var(--approved);}
+  .sealnum{font-family:var(--mono); font-size:36px; font-weight:700; color:var(--denied); line-height:1;}
+  .homeseal.ok .sealnum{color:var(--approved);}
+  .seallabel{font-family:var(--stamp); font-size:11px; font-weight:700; color:var(--denied); letter-spacing:.06em;}
+  .homeseal.ok .seallabel{color:var(--approved);}
+  .sealnote{margin:0; text-align:center; font-size:11.5px; color:var(--dim); line-height:1.5;}
+
+  .homebreakdown{flex:1 1 380px; min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:4px;
+    padding:18px 20px; display:flex; flex-direction:column; justify-content:center; gap:12px;}
+  .bdhead{display:flex; align-items:baseline; justify-content:space-between;}
+  .bdti{font-size:11.5px; font-weight:700; color:var(--dim); letter-spacing:.04em;}
+  .bdtotal{font-family:var(--mono); font-size:11.5px; color:var(--dim);}
+  .bdbar{display:flex; width:100%; height:24px; border-radius:4px; overflow:hidden; background:var(--field);}
+  .bdseg{border-right:2px solid var(--panel);}
+  .bdseg:last-child{border-right:none;}
+  .bdlegend{display:flex; flex-wrap:wrap; gap:6px 18px;}
+  .leg{all:unset; cursor:pointer; display:flex; align-items:center; gap:6px; padding:3px 6px; border-radius:3px;}
+  .leg.active{background:var(--field);}
+  .leg .dot{width:9px; height:9px; border-radius:2px; flex:0 0 auto;}
+  .leg .lb{font-size:12px; font-weight:700; color:var(--ink);}
+  .leg .ct{font-size:12px; font-weight:700;}
+
+  .bdseg.cat-approve, .leg.cat-approve .dot, .feedtag.cat-approve{background:var(--pending);}
+  .bdseg.cat-missing, .leg.cat-missing .dot, .feedtag.cat-missing{background:var(--denied);}
+  .bdseg.cat-mistake, .leg.cat-mistake .dot, .feedtag.cat-mistake{background:var(--mistake);}
+  .bdseg.cat-yukyu  , .leg.cat-yukyu   .dot, .feedtag.cat-yukyu{background:var(--provisional);}
+  .bdseg.cat-zangyo , .leg.cat-zangyo  .dot, .feedtag.cat-zangyo{background:var(--rail-accent);}
+  .leg.cat-approve .ct{color:var(--pending);}
+  .leg.cat-missing .ct{color:var(--denied);}
+  .leg.cat-mistake .ct{color:var(--mistake);}
+  .leg.cat-yukyu   .ct{color:var(--provisional);}
+  .leg.cat-zangyo  .ct{color:var(--rail-accent);}
+
+  .homefeedcard{padding:0;}
+  .homefeedhead{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;
+    padding:16px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; background:var(--panel);}
+  .homefeedhead h2{margin:0; font-family:var(--display); font-weight:900; font-size:15px; color:var(--ink);}
+  .feedcount{font-family:var(--mono); font-size:11.5px; color:var(--dim);}
+  .homefeedactions{display:flex; align-items:center; gap:12px;}
+  .linklike{all:unset; cursor:pointer; font-size:12px; font-weight:700; color:var(--dim);}
+  .bulkbtn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700;
+    padding:8px 14px; border-radius:3px; background:var(--rail); color:var(--rail-ink);}
+
+  .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:14px; width:100%;
+    padding:12px 18px; border-bottom:1px solid var(--field);}
+  .feedrow:last-child{border-bottom:none;}
+  .feedrow:hover{background:var(--bg);}
+  .feedtag{flex:0 0 84px; font-size:10.5px; font-weight:700; text-align:center; padding:3px 0; border-radius:3px; color:#fff;}
+  .feedname{flex:0 0 100px; font-size:13px; font-weight:700; color:var(--ink);}
+  .feeddetail{flex:1 1 auto; min-width:0; font-size:12.5px; color:var(--ink); text-align:left; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap;}
+  .feedmeta{flex:0 0 auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim);}
+  .feedarrow{flex:0 0 auto; color:var(--line); font-size:13px;}
+
+  .levelbadge{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; color:#fff;}
+  .levelbadge.l60{background:var(--denied);}
+  .levelbadge.l45{background:var(--pending);}
+
+  .statuspill{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; background:#fff;}
+  .statuspill.pending{color:var(--pending); border-color:var(--pending);}
+  .statuspill.provisional{color:var(--provisional); border-color:var(--provisional);}
+  .statuspill.approved{color:var(--approved); border-color:var(--approved);}
+  .statuspill.denied{color:var(--denied); border-color:var(--denied);}
+
+  .kbnbadge{font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:999px; font-family:var(--mono); white-space:nowrap;}
+  .kbnbadge.sei{background:var(--rail); color:var(--rail-ink);}
+  .kbnbadge.part{background:var(--rail-accent); color:var(--ink);}
+
+  .homefooter{font-size:12px; color:var(--dim); padding:10px 2px 0; border-top:1px dashed var(--line); margin-top:4px;}
+
+  .toast{position:fixed; left:50%; bottom:20px; transform:translateX(-50%) translateY(16px);
+    background:var(--ink); color:var(--bg); padding:11px 18px; border-radius:7px; font-size:12.5px; font-weight:700;
+    opacity:0; pointer-events:none; transition:all .18s ease; z-index:30; font-family:var(--mono); max-width:90vw;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.err{background:var(--denied);}
+
+  /* ── 年度選択（レール上部、全タブ共通。2026-10-18新設） ──
+     レール内側（.rail-inner）は常に固定幅（220px）で、外側の.railが64px/220pxの「窓」として
+     クリップする作り（ナビボタンの文字もこれで折りたたみ時に隠れている）。ボタンの文字は
+     単なる文字なのでクリップされても何も見えないが、selectは自分の背景・枠線を持つため、
+     窓の境目にその一部だけがはみ出して見えてしまっていた（ユーザー指摘：「はみ出て見えない」）。
+     ①折りたたみ時はopacity:0で完全に透明にし、レールにカーソルが乗った時だけ見せる。
+     ②それだけでは展開時もselect自体が収まりきらず入らなかったため、レール自体の展開幅を
+     196px→220pxに広げてselectの実際の幅も確保した（ユーザー指摘：「あまり変化が見られない」） */
+  .rail .fiscalyear{display:flex; align-items:center; gap:13px; padding:0 9px; margin-bottom:14px; white-space:nowrap;}
+  .rail .fiscalyear .ic{font-size:16px; width:20px; text-align:center; flex-shrink:0;}
+  .fiscalyear-select{background:var(--rail-field); color:var(--rail-ink); border:1px solid rgba(255,255,255,.16);
+    border-radius:5px; padding:5px 6px; font-size:12px; font-family:var(--body); font-weight:700; width:145px; max-width:145px;
+    opacity:0; transition:opacity .12s ease;}
+  .rail:hover .fiscalyear-select{opacity:1;}
+  .pastyearnote{display:none; background:var(--pending); color:#2B1D00; font-weight:700; font-size:12.5px;
+    padding:9px 16px; border-radius:7px; margin-bottom:14px;}
+  body.pastyear .pastyearnote{display:block;}
+  /* 過去の年度は閲覧専用：承認/否認・差し戻し・新規作成等の操作UIを隠す */
+  body.pastyear .rowbtns, body.pastyear .drawer-actions, body.pastyear #dengon-new{display:none;}
+
+  @media (max-width:720px){
+    .app{flex-direction:column;}
+    .rail-spacer{display:none;}
+    .rail{position:sticky; top:0; left:auto; bottom:auto; width:100%; z-index:15;}
+    .rail:hover{width:100%; box-shadow:none;}
+    .rail-inner{width:100%;}
+    .rail nav{flex-direction:row; overflow-x:auto;}
+    .rail button{width:auto;}
+    .rail .fiscalyear{margin-bottom:8px;}
+    .fiscalyear-select{opacity:1;} /* モバイルはレールが常に全幅で折りたたみが無いため、常に表示する */
+    .sheet{overflow-x:auto;}
+    table{min-width:700px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="logincard">
+    <div class="lhead">
+      <div class="mark">西</div>
+      <h1>勤怠管理ポータル</h1>
+      <p>西軽精機・総務課専用</p>
+    </div>
+    <div class="lbody">
+      <div id="g_id_onload"
+           data-client_id="800178947678-ue8faa8jscidc84656i4ch1d4j0n9lks.apps.googleusercontent.com"
+           data-callback="handleCredentialResponse"
+           data-auto_select="true"
+           data-cancel_on_tap_outside="false">
+      </div>
+      <div class="g_id_signin" data-type="standard"></div>
+      <div class="lnote">代理入力管理者（総務課）としてGoogleアカウントでログインしてください。</div>
+      <div id="loadingNote">確認中…</div>
+      <div id="denied">このポータルは代理入力管理者（総務課）専用です。<br>権限が必要な場合は総務までご連絡ください。</div>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <div class="rail-spacer"></div>
+  <div class="rail"><div class="rail-inner">
+    <div class="brand"><div class="mark">西</div><div class="tx">勤怠管理<br>ポータル<small>西軽精機・総務課</small></div></div>
+    <div class="fiscalyear"><span class="ic">📅</span><select id="fiscalyear-select" class="fiscalyear-select"><option value="">現在の年度</option></select></div>
+    <nav>
+      <button class="active" data-nav="home"><span class="ic">🏠</span>ホーム</button>
+      <button data-nav="shinsei"><span class="ic">📋</span>申請一覧</button>
+      <button data-nav="shusei"><span class="ic">🛠️</span>修正依頼</button>
+      <button data-nav="dakoku"><span class="ic">🕒</span>打刻ログ</button>
+      <button data-nav="shuukei"><span class="ic">📊</span>36協定</button>
+      <button data-nav="yukyu"><span class="ic">🏖️</span>有給管理</button>
+      <button data-nav="tokubetsu"><span class="ic">🎌</span>特別休暇管理</button>
+      <button data-nav="dengon"><span class="ic">💬</span>伝言板</button>
+      <button data-nav="gesshu"><span class="ic">📅</span>月次集計</button>
+      <button data-nav="shuubetsu"><span class="ic">📆</span>週別実働</button>
+      <button data-nav="dakokukakunin"><span class="ic">🗓️</span>打刻確認</button>
+      <button data-nav="shain"><span class="ic">👤</span>社員マスタ</button>
+    </nav>
+    <div class="who" id="signedInAs"></div>
+  </div></div>
+
+  <div class="main">
+    <div class="pastyearnote" id="pastyearnote">📁 過去の年度を表示中です（閲覧専用。承認・否認や新規作成はできません）</div>
+    <div id="page-home">
+      <div class="pagehead">
+        <h1>🏠 ホーム</h1>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+          <a class="sheetlink" id="home-sheetlink" href="#" target="_blank" rel="noopener">📊 勤怠管理スプレッドシートを開く</a>
+          <span class="sub" id="home-period">対象期間：読み込み中…</span>
+        </div>
+      </div>
+
+      <div class="homehero">
+        <div class="homeseal" id="home-seal">
+          <div class="sealring">
+            <span class="sealnum" id="home-seal-num">0</span>
+            <span class="seallabel" id="home-seal-label">件 要対応</span>
+          </div>
+          <p class="sealnote">本日時点、総務の確認が必要な件数です</p>
+        </div>
+        <div class="homebreakdown">
+          <div class="bdhead"><span class="bdti">内訳</span><span class="bdtotal" id="home-bd-total">合計 0件</span></div>
+          <div class="bdbar" id="home-bd-bar"></div>
+          <div class="bdlegend" id="home-bd-legend"></div>
+        </div>
+      </div>
+
+      <div class="sheet homefeedcard">
+        <div class="homefeedhead">
+          <div style="display:flex; align-items:baseline; gap:10px;">
+            <h2>対応が必要な一覧</h2>
+            <span class="feedcount" id="home-feed-count">0件を表示中</span>
+          </div>
+          <div class="homefeedactions" id="home-feed-actions" hidden>
+            <button type="button" class="linklike" id="home-feed-clear">絞り込みを解除</button>
+            <button type="button" class="bulkbtn" id="home-feed-bulk" hidden></button>
+          </div>
+        </div>
+        <div id="home-feed-rows"></div>
+        <div class="emptystate" id="home-feed-empty" hidden>該当する項目はありません。</div>
+      </div>
+
+      <div class="homefooter">💡 各行をクリックすると、その社員で絞り込んで該当タブを開きます。内訳でカテゴリを選ぶと、氏名で絞らずまとめて確認できます。</div>
+    </div>
+
+    <div id="page-shinsei" hidden>
+      <div class="pagehead"><h1>申請一覧</h1><span class="sub">SHINSEI-KANRI / LIVE QUEUE</span></div>
+
+      <div class="filterbar">
+        <div class="f"><label>申請ID</label><select id="f-id"><option value="">すべて</option></select></div>
+        <div class="f grow"><label>氏名</label><select id="f-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>種別</label><select id="f-ykbn"><option value="">すべて</option></select></div>
+        <div class="f"><label>種別・内容</label>
+          <select id="f-type"><option value="">すべて</option><option value="yukyu">有給・遅刻・早退・特別休暇</option>
+            <option value="zangyou">残業</option><option value="chokkou">直行・直帰・出張</option></select></div>
+        <div class="f"><label>対象日</label><input type="date" id="f-date"></div>
+        <div class="f"><label>状況</label>
+          <div class="pills" id="f-status">
+            <button class="pill" aria-pressed="true" data-status="">すべて</button>
+            <button class="pill" aria-pressed="false" data-status="承認待">待</button>
+            <button class="pill" aria-pressed="false" data-status="仮承認">仮</button>
+            <button class="pill" aria-pressed="false" data-status="承認済">済</button>
+            <button class="pill" aria-pressed="false" data-status="否認">否</button>
+          </div></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="refresh">再読み込み</button></div>
+      </div>
+
+      <p class="resultcount" id="resultcount"></p>
+
+      <div class="sheet">
+        <table>
+          <thead><tr><th>ID</th><th>氏名</th><th>種別</th><th>種別・内容</th><th>対象日</th><th>事前/事後</th><th>判定</th><th>操作</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="emptystate" id="emptystate" hidden>条件に一致する申請がありません。</div>
+      </div>
+    </div>
+
+    <div id="page-shusei" hidden>
+      <div class="pagehead"><h1>修正依頼</h1><span class="sub">SHUSEI-IRAI / CORRECTION QUEUE</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="fs-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>内容</label><select id="fs-content"><option value="">すべて</option>
+          <option>出勤時刻の修正</option><option>退勤時刻の修正</option><option>外出時刻の修正</option>
+          <option>帰社時刻の修正</option><option>打刻の追加</option><option>打刻の削除</option></select></div>
+        <div class="f"><label>対象日</label><input type="date" id="fs-date"></div>
+        <div class="f"><label>状況</label>
+          <div class="pills" id="fs-status">
+            <button class="pill" aria-pressed="true" data-status="">すべて</button>
+            <button class="pill" aria-pressed="false" data-status="承認待">待</button>
+            <button class="pill" aria-pressed="false" data-status="仮承認">仮</button>
+            <button class="pill" aria-pressed="false" data-status="承認済">済</button>
+            <button class="pill" aria-pressed="false" data-status="否認">否</button>
+          </div></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shusei-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="shusei-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>ID</th><th>氏名</th><th>内容</th><th>対象日</th><th>正しい時刻</th><th>判定</th><th>操作</th></tr></thead>
+          <tbody id="shusei-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="shusei-emptystate" hidden>条件に一致する修正依頼がありません。</div>
+      </div>
+    </div>
+
+    <div id="page-dakoku" hidden>
+      <div class="pagehead"><h1>打刻ログ</h1><span class="sub">DAKOKU-LOG / RAW RECORDS</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="fd-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>種別</label><select id="fd-type"><option value="">すべて</option>
+          <option>出勤</option><option>退勤</option><option>外出</option><option>帰社</option></select></div>
+        <div class="f"><label>日付</label><input type="date" id="fd-date"></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="dakoku-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="dakoku-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>日時</th><th>氏名</th><th>種別</th><th>実打刻時刻</th><th>集計用時刻</th><th>備考</th></tr></thead>
+          <tbody id="dakoku-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="dakoku-emptystate" hidden>条件に一致する打刻がありません。</div>
+      </div>
+    </div>
+    <div id="page-shuukei" hidden>
+      <div class="pagehead"><h1>36協定</h1><span class="sub">ZANGYOU-36 / YEAR TO DATE</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="fz-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="zangyou-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="zangyou-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>氏名</th><th class="zone-end">雇用区分</th><th>年間残業累計</th><th>36協定年間残り</th><th class="zone-end">月60h超累計</th><th>当月残業</th><th>複数月平均</th></tr></thead>
+          <tbody id="zangyou-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="zangyou-emptystate" hidden>データがありません。</div>
+      </div>
+    </div>
+
+    <div id="page-yukyu" hidden>
+      <div class="pagehead"><h1>有給管理</h1><span class="sub">YUKYU-KANRI / LEAVE BALANCE</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="fy-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="yukyu-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="yukyu-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>氏名</th><th class="zone-end">勤続年数</th><th>今年度付与日数</th><th>通常有給残日数</th><th class="zone-end">消化済み日数</th><th>積立有給残日数</th><th>積立有給消化日数</th></tr></thead>
+          <tbody id="yukyu-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="yukyu-emptystate" hidden>データがありません。</div>
+      </div>
+    </div>
+
+    <div id="page-tokubetsu" hidden>
+      <div class="pagehead"><h1>特別休暇管理</h1><span class="sub">TOKUBETSU-KANRI / SPECIAL LEAVE</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="ft-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>種別</label><select id="ft-type"><option value="">すべて</option>
+          <option value="特別休暇（弔事）">弔事</option><option value="特別休暇（慶事）">慶事</option>
+          <option value="傷病等特別休暇">傷病等</option><option value="積立有給">積立有給</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="tokubetsu-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="tokubetsu-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>氏名</th><th>種別</th><th class="txtleft">詳細</th><th>起算日</th><th>付与日数</th><th>消化日数</th><th>残日数</th><th>使用期限</th><th>状況</th></tr></thead>
+          <tbody id="tokubetsu-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="tokubetsu-emptystate" hidden>条件に一致するデータがありません。</div>
+      </div>
+    </div>
+    <div id="page-dengon" hidden>
+      <div class="pagehead"><h1>伝言板</h1><span class="sub">DENGONBAN / MESSAGE BOARD</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>宛先氏名</label><select id="fdg-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>状況</label><select id="fdg-status"><option value="">すべて</option>
+          <option value="表示">未確認</option><option value="済">確認済み</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="dengon-refresh">再読み込み</button></div>
+        <div class="f"><label>&nbsp;</label><button class="newbtn" id="dengon-new">＋ 新規作成</button></div>
+      </div>
+      <p class="resultcount" id="dengon-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>状況</th><th>宛先氏名</th><th>送信者</th><th class="txtleft">メッセージ内容</th><th>登録日時</th><th>確認日時</th></tr></thead>
+          <tbody id="dengon-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="dengon-emptystate" hidden>条件に一致するデータがありません。</div>
+      </div>
+    </div>
+    <div id="page-gesshu" hidden>
+      <div class="pagehead"><h1>月次集計</h1><span class="sub">GESSHU-SHUUKEI / MONTHLY（給与じまん入力用）</span></div>
+      <div class="filterbar">
+        <div class="f"><label>対象月</label><select id="fg-label"></select></div>
+        <div class="f grow"><label>氏名</label><select id="fg-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="gesshu-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="gesshu-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead id="gesshu-thead"></thead>
+          <tbody id="gesshu-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="gesshu-emptystate" hidden>データがありません。</div>
+      </div>
+    </div>
+    <div id="page-shuubetsu" hidden>
+      <div class="pagehead"><h1>週別実働</h1><span class="sub">SHUUBETSU-JITSUDO / WEEKLY（週区切り：月〜日）</span></div>
+      <div class="filterbar">
+        <div class="f"><label>対象月</label><select id="fw-label"></select></div>
+        <div class="f grow"><label>氏名</label><select id="fw-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shuubetsu-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="shuubetsu-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead id="shuubetsu-thead"></thead>
+          <tbody id="shuubetsu-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="shuubetsu-emptystate" hidden>データがありません。</div>
+      </div>
+    </div>
+    <div id="page-dakokukakunin" hidden>
+      <div class="pagehead"><h1>打刻確認</h1><span class="sub">DAKOKU-KAKUNIN / MONTHLY MATRIX（総務課確認用）</span></div>
+      <div class="filterbar">
+        <div class="f"><label>対象月</label><select id="fk-label"></select></div>
+        <div class="f grow"><label>氏名</label><select id="fk-name"><option value="">全員表示</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="dakokukakunin-refresh">再読み込み</button></div>
+      </div>
+      <div style="font-size:12px; color:var(--dim); margin:-2px 0 8px 2px;">💡 社員数が多く見づらい時は、「氏名」で1人だけに絞り込むと見やすくなります。</div>
+      <p class="resultcount" id="dakokukakunin-resultcount"></p>
+      <div class="sheet">
+        <table id="dakokukakunin-table">
+          <colgroup id="dakokukakunin-colgroup"></colgroup>
+          <thead id="dakokukakunin-thead"></thead>
+          <tbody id="dakokukakunin-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="dakokukakunin-emptystate" hidden>データがありません。</div>
+      </div>
+    </div>
+    <div id="page-shain" hidden>
+      <div class="pagehead"><h1>社員マスタ</h1><span class="sub">SHAIN-MASTER / ROSTER</span></div>
+      <div class="filterbar">
+        <div class="f grow"><label>氏名</label><select id="fm-name"><option value="">すべて</option></select></div>
+        <div class="f"><label>雇用区分</label><select id="fm-koyou"><option value="">すべて</option>
+          <option>正社員</option><option>パート</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shain-refresh">再読み込み</button></div>
+      </div>
+      <p class="resultcount" id="shain-resultcount"></p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>氏名</th><th>雇用区分</th><th>定時</th><th>入社日</th><th>勤務曜日</th><th>テスト参加</th><th>備考</th></tr></thead>
+          <tbody id="shain-tbody"></tbody>
+        </table>
+        <div class="emptystate" id="shain-emptystate" hidden>条件に一致する社員がいません。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer-backdrop" id="backdrop"></div>
+<div class="drawer" id="drawer" aria-hidden="true">
+  <button class="drawer-close" id="drawer-close">← 一覧へ戻る</button>
+  <h2 id="d-name"></h2>
+  <div class="appid" id="d-appid"></div>
+  <dl>
+    <dt>種別</dt><dd id="d-ykbn"></dd>
+    <dt>種別・内容</dt><dd id="d-type"></dd>
+    <dt>対象日</dt><dd id="d-date"></dd>
+    <dt>事前/事後</dt><dd id="d-jizen"></dd>
+    <dt>判定</dt><dd id="d-status"></dd>
+    <div id="d-extra"></div>
+    <dt>理由・備考</dt><dd><div class="reason" id="d-reason"></div></dd>
+  </dl>
+  <div class="drawer-actions" id="d-actions"></div>
+</div>
+
+<div class="drawer-backdrop" id="s-backdrop"></div>
+<div class="drawer" id="s-drawer" aria-hidden="true">
+  <button class="drawer-close" id="s-drawer-close">← 一覧へ戻る</button>
+  <h2 id="s-name"></h2>
+  <div class="appid" id="s-appid"></div>
+  <dl>
+    <dt>申請日時</dt><dd id="s-appdt"></dd>
+    <dt>内容</dt><dd id="s-content"></dd>
+    <dt>対象日</dt><dd id="s-date"></dd>
+    <dt>正しい時刻</dt><dd id="s-jissai"></dd>
+    <dt>判定</dt><dd id="s-status"></dd>
+    <div id="s-extra"></div>
+    <dt>修正理由</dt><dd><div class="reason" id="s-reason"></div></dd>
+  </dl>
+  <div class="drawer-actions" id="s-actions"></div>
+</div>
+
+<div class="drawer-backdrop" id="z-backdrop"></div>
+<div class="drawer" id="z-drawer" aria-hidden="true">
+  <button class="drawer-close" id="z-drawer-close">← 一覧へ戻る</button>
+  <h2 id="z-name"></h2>
+  <div class="appid" id="z-koyou"></div>
+  <dl>
+    <dt>年間残業累計</dt><dd id="z-nenkan"></dd>
+    <dt>36協定年間残り</dt><dd id="z-zan36"></dd>
+    <dt>月60h超累計</dt><dd id="z-excess60"></dd>
+    <dt>複数月平均</dt><dd id="z-heikin"></dd>
+  </dl>
+  <div class="monthgrid" id="z-months"></div>
+</div>
+
+<div class="drawer-backdrop" id="m-backdrop"></div>
+<div class="drawer" id="m-drawer" aria-hidden="true">
+  <button class="drawer-close" id="m-drawer-close">← 一覧へ戻る</button>
+  <h2 id="m-name"></h2>
+  <div class="appid" id="m-furigana"></div>
+  <dl>
+    <dt>メールアドレス</dt><dd id="m-email"></dd>
+    <dt>雇用区分</dt><dd id="m-koyou"></dd>
+    <dt>定時</dt><dd id="m-teiji"></dd>
+    <dt>入社日</dt><dd id="m-nyusha"></dd>
+    <dt>勤務曜日</dt><dd id="m-workdays"></dd>
+    <dt>独自ルール対象</dt><dd id="m-dokuji"></dd>
+    <dt>テスト参加</dt><dd id="m-testsanka"></dd>
+    <dt>NFCタグID</dt><dd id="m-nfc"></dd>
+    <dt>備考</dt><dd><div class="reason" id="m-biko"></div></dd>
+  </dl>
+</div>
+
+<div class="drawer-backdrop" id="y-backdrop"></div>
+<div class="drawer" id="y-drawer" aria-hidden="true">
+  <button class="drawer-close" id="y-drawer-close">← 一覧へ戻る</button>
+  <h2 id="y-name"></h2>
+  <div class="appid" id="y-kinzoku"></div>
+  <dl>
+    <dt>今年度付与日数</dt><dd id="y-fuyo"></dd>
+    <dt>前年度付与日数</dt><dd id="y-fuyozen"></dd>
+    <dt>前年繰越</dt><dd id="y-kurikoshi"></dd>
+    <dt>消化済み日数</dt><dd id="y-shoka"></dd>
+    <dt>通常有給残日数</dt><dd id="y-zanzan"></dd>
+    <dt>積立有給繰越残</dt><dd id="y-tkurikoshi"></dd>
+    <dt>今年度積立移行</dt><dd id="y-tido"></dd>
+    <dt>積立有給消化日数</dt><dd id="y-tshoka"></dd>
+    <dt>積立有給残日数</dt><dd id="y-tzan"></dd>
+  </dl>
+</div>
+
+<div class="drawer-backdrop" id="t-backdrop"></div>
+<div class="drawer" id="t-drawer" aria-hidden="true">
+  <button class="drawer-close" id="t-drawer-close">← 一覧へ戻る</button>
+  <h2 id="t-name"></h2>
+  <div class="appid" id="t-appid"></div>
+  <dl>
+    <dt>申請日時</dt><dd id="t-appdt"></dd>
+    <dt>種別</dt><dd id="t-shinsei"></dd>
+    <dt>詳細</dt><dd id="t-detail"></dd>
+    <dt>起算日</dt><dd id="t-kisan"></dd>
+    <dt>付与日数</dt><dd id="t-fuyo"></dd>
+    <dt>消化日数</dt><dd id="t-shoka"></dd>
+    <dt>残日数</dt><dd id="t-zan"></dd>
+    <dt>使用期限</dt><dd id="t-kigen"></dd>
+    <dt>状況</dt><dd id="t-chouka"></dd>
+    <dt>備考</dt><dd><div class="reason" id="t-biko"></div></dd>
+  </dl>
+</div>
+
+<div class="drawer-backdrop" id="dd-backdrop"></div>
+<div class="drawer" id="dd-drawer" aria-hidden="true">
+  <button class="drawer-close" id="dd-drawer-close">← 一覧へ戻る</button>
+  <h2 id="dd-name"></h2>
+  <div class="appid" id="dd-msgid"></div>
+  <dl>
+    <dt>送信者</dt><dd id="dd-sender"></dd>
+    <dt>メッセージ内容</dt><dd><div class="reason" id="dd-content"></div></dd>
+    <dt>登録日時</dt><dd id="dd-entrydate"></dd>
+    <dt>状況</dt><dd id="dd-status"></dd>
+    <dt>確認日時</dt><dd id="dd-confirmdate"></dd>
+  </dl>
+</div>
+
+<div class="drawer-backdrop" id="dc-backdrop"></div>
+<div class="drawer" id="dc-drawer" aria-hidden="true">
+  <button class="drawer-close" id="dc-drawer-close">← 一覧へ戻る</button>
+  <h2>新規作成</h2>
+  <div class="composer-field"><label>宛先氏名</label><select id="dc-name"><option value="">選択してください</option></select></div>
+  <div class="composer-field"><label>送信者</label><input type="text" id="dc-sender" placeholder="例：総務"></div>
+  <div class="composer-field"><label>メッセージ内容</label><textarea id="dc-content" placeholder="伝言の内容を入力してください"></textarea></div>
+  <div class="drawer-actions"><button class="go" id="dc-send">送信</button></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var GAS_URL = 'https://script.google.com/a/macros/nishikaru.co.jp/s/AKfycbzht6wuAjcOKeiGL20sHIEE1ip10b7haJfb5lFNahg7XN-ZBKZtwhxE3sfPhydCA21xYg/exec';
+  var idToken = null, myEmail = '', myName = '';
+  // 2026-10-18新設：年度選択（過去の年度のスプレッドシートを閲覧する機能）。
+  // currentSsId=''は「現在の年度」、それ以外は過去年度のスプレッドシートID。
+  // 書き込み系（承認/否認・伝言板の新規作成等）のdoPostはssIdを一切見ないため、
+  // バックエンド側は常に現在の年度にしか書き込めない（isPastYearViewはUI側の安全策）
+  var currentSsId = '', isPastYearView = false, FISCAL_YEARS = [];
+  // mode=portal*系のGET用URLを組み立てる共通ヘルパー。年度選択中はssIdを自動で付ける
+  function portalApiUrl_(mode, extraParams){
+    var qs = 'mode=' + encodeURIComponent(mode) + '&token=' + encodeURIComponent(idToken);
+    if (currentSsId) qs += '&ssId=' + encodeURIComponent(currentSsId);
+    if (extraParams) {
+      Object.keys(extraParams).forEach(function(k){ qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(extraParams[k]); });
+    }
+    return GAS_URL + '?' + qs;
+  }
+  var ROWS = [];
+  var state = { id:'', name:'', ykbn:'', date:'', type:'', status:'' };
+  var currentId = null;
+  var busy = false;
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  // 雇用区分（正社員/パート）をひと目で見分けられるバッジにする（2026-10-17、ユーザー要望で追加）
+  function kbnBadge_(kbn){
+    if (!kbn) return '—';
+    var cls = kbn.indexOf('正社員') !== -1 ? 'sei' : 'part';
+    return '<span class="kbnbadge ' + cls + '">' + escapeHtml(kbn) + '</span>';
+  }
+
+  // IDトークンの中身はUTF-8。atob()は1バイトずつ文字にするだけなので、そのままだと
+  // 日本語の名前が「æ£®æ³…」のように化ける（2026-10-17、伝言板の送信者欄で発覚）。UTF-8として読み直す
+  function base64UrlDecode_(str){
+    var base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    var bin = atob(base64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  var STAMP = {'承認待':['pending','待'], '仮承認':['provisional','仮'], '承認済':['approved','済'], '否認':['denied','否']};
+
+  // 詳細ドロワーの固定項目（種別・対象日等）以外に、値が入っている時だけ追加表示する
+  // シートの残りの列。申請種別によってどの列が使われるかが違うため、空欄のものは出さない
+  var EXTRA_FIELDS = [
+    ['appDateTime',    '申請日時'],
+    ['hiruKyukei',     '昼休憩'],
+    ['gogoKyukei',     '午後休憩'],
+    ['jitsuZangyou',   '実残業時間'],
+    ['tokubetsuKisan', '特別休暇起算日'],
+    ['tokubetsuDetail','特別休暇詳細'],
+    ['zokugara',       '続柄'],
+  ];
+
+  // サーバーから返ってくる生データ（COL_SHINSEIの値）を、画面表示用の形に変換する
+  var CHOKKOU_TYPES = ['直行のみ', '直帰のみ', '直行・直帰'];
+  function categoryOf(r){
+    if (r.shinsei === '残業') return 'zangyou';
+    if (CHOKKOU_TYPES.indexOf(r.shinsei) !== -1) return 'chokkou';
+    return 'yukyu';
+  }
+  function buildDetail(r){
+    if (r.shinsei === '残業') {
+      var sched = (r.startTime && r.endTime) ? (r.startTime + '〜' + r.endTime + ' 予定') : '';
+      var actual = r.jitsuZangyou ? ('実績 ' + r.jitsuZangyou) : '';
+      if (sched && actual) return sched + '／' + actual;
+      return sched || actual || '残業';
+    }
+    if (CHOKKOU_TYPES.indexOf(r.shinsei) !== -1) return r.shinsei;
+    if (r.yukyuKbn && r.yukyuKbn.indexOf('特別休暇') !== -1) return r.yukyuKbn;
+    if (r.yukyuKbn === '傷病等特別休暇') return r.yukyuKbn;
+    if (r.shinsei === '1日') return (r.yukyuKbn || '通常有給') + '（1日）';
+    if (r.shinsei === '午前休' || r.shinsei === '午後休') return r.shinsei + (r.yukyuKbn ? '（' + r.yukyuKbn + '）' : '');
+    if (['遅刻', '早退', '中抜け', '遅刻・中抜け＋早退'].indexOf(r.shinsei) !== -1) {
+      return r.shinsei + (r.jikanSowtai ? '（' + r.jikanSowtai + '）' : '');
+    }
+    return r.shinsei || r.yukyuKbn || '—';
+  }
+  function buildDateLabel(r){
+    if (r.taishouDateEnd && r.taishouDateEnd !== r.taishouDate) return r.taishouDate + '〜' + r.taishouDateEnd;
+    return r.taishouDate || '—';
+  }
+
+  function actionsFor(status, size){
+    var go = size === 'drawer' ? '承認する' : '承認';
+    var stop = size === 'drawer' ? '否認する' : '否認';
+    var back = size === 'drawer' ? '承認待に差し戻す' : '差し戻し';
+    var denyChange = size === 'drawer' ? '否認に変更する' : '否認に変更';
+    if (status === '承認待' || status === '仮承認') return [['go','approve',go], ['stop','deny',stop]];
+    if (status === '承認済') return [['back','revert',back], ['stop','deny',denyChange]];
+    return [['back','revert',back]]; // 否認
+  }
+
+  // 入力/表示で形式が違う日付文字列（yyyy-MM-dd・yyyy/MM/dd）を数字だけのyyyyMMddに揃えて比較する
+  function normDate(s){ return String(s || '').replace(/[^0-9]/g, ''); }
+
+  function matches(r){
+    if (state.status && r.status !== state.status) return false;
+    if (state.type && categoryOf(r) !== state.type) return false;
+    if (state.id && r.appId !== state.id) return false;
+    if (state.name && r.name !== state.name) return false;
+    if (state.ykbn && r.yukyuKbn !== state.ykbn) return false;
+    if (state.date) {
+      var d = normDate(state.date);
+      var start = normDate(r.taishouDate);
+      var end = normDate(r.taishouDateEnd) || start;
+      if (!start || d < start || d > end) return false;
+    }
+    return true;
+  }
+
+  // ROWS読み込み後、申請ID・氏名プルダウンの選択肢を実データから作り直す。
+  // 選び直す必要が無いよう、既に選択中の値がまだ候補にあれば維持する
+  function populateFilterDropdowns(){
+    var idSel = document.getElementById('f-id'), nameSel = document.getElementById('f-name'), ykbnSel = document.getElementById('f-ykbn');
+    var ids = Array.from(new Set(ROWS.map(function(r){ return r.appId; }))).sort().reverse();
+    var names = Array.from(new Set(ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var ykbns = Array.from(new Set(ROWS.map(function(r){ return r.yukyuKbn; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+
+    idSel.innerHTML = '<option value="">すべて</option>' +
+      ids.map(function(id){ return '<option value="' + escapeHtml(id) + '">' + escapeHtml(id) + '</option>'; }).join('');
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    ykbnSel.innerHTML = '<option value="">すべて</option>' +
+      ykbns.map(function(k){ return '<option value="' + escapeHtml(k) + '">' + escapeHtml(k) + '</option>'; }).join('');
+
+    idSel.value = ids.indexOf(state.id) !== -1 ? state.id : '';
+    nameSel.value = names.indexOf(state.name) !== -1 ? state.name : '';
+    ykbnSel.value = ykbns.indexOf(state.ykbn) !== -1 ? state.ykbn : '';
+    state.id = idSel.value; state.name = nameSel.value; state.ykbn = ykbnSel.value;
+  }
+
+  function render(){
+    var tbody = document.getElementById('tbody');
+    var filtered = ROWS.filter(matches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.id = r.appId;
+      var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
+      tr.className = 'row-' + st[0];
+      var btns = actionsFor(r.status, 'row').map(function(a){
+        return '<button class="rb ' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
+      }).join('');
+      tr.innerHTML =
+        '<td class="mono">' + escapeHtml(r.appId) + '</td>' +
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(r.yukyuKbn || '—') + '</td>' +
+        '<td>' + escapeHtml(r.detail) + '</td>' +
+        '<td class="mono">' + escapeHtml(buildDateLabel(r)) + '</td>' +
+        '<td>' + escapeHtml(r.jizenGo || '—') + '</td>' +
+        '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
+        '<td><div class="rowbtns">' + btns + '</div></td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('emptystate').hidden = filtered.length > 0;
+    document.getElementById('resultcount').textContent = filtered.length + ' 件（全' + ROWS.length + '件中）';
+  }
+
+  document.getElementById('f-id').addEventListener('change', function(e){ state.id = e.target.value; render(); });
+  document.getElementById('f-name').addEventListener('change', function(e){ state.name = e.target.value; render(); });
+  document.getElementById('f-ykbn').addEventListener('change', function(e){ state.ykbn = e.target.value; render(); });
+  document.getElementById('f-date').addEventListener('change', function(e){ state.date = e.target.value; render(); });
+  document.getElementById('f-type').addEventListener('change', function(e){ state.type = e.target.value; render(); });
+  document.getElementById('f-status').addEventListener('click', function(e){
+    var btn = e.target.closest('.pill'); if (!btn) return;
+    document.querySelectorAll('#f-status .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true'); state.status = btn.dataset.status; render();
+  });
+  document.getElementById('refresh').addEventListener('click', function(){ loadShinseiList(); });
+
+  var drawer = document.getElementById('drawer'), backdrop = document.getElementById('backdrop');
+  function openDrawer(id){
+    var r = ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    currentId = id;
+    document.getElementById('d-name').textContent = r.name;
+    document.getElementById('d-appid').textContent = id;
+    document.getElementById('d-ykbn').textContent = r.yukyuKbn || '—';
+    document.getElementById('d-type').textContent = r.detail;
+    document.getElementById('d-date').textContent = buildDateLabel(r);
+    document.getElementById('d-jizen').textContent = r.jizenGo || '—';
+    var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
+    document.getElementById('d-status').innerHTML = '<span class="stamp ' + st[0] + '">' + st[1] + '</span>';
+    document.getElementById('d-reason').textContent = r.riyu || '（記入なし）';
+    document.getElementById('d-extra').innerHTML = EXTRA_FIELDS.map(function(f){
+      var v = r[f[0]];
+      if (!v) return '';
+      return '<dt>' + f[1] + '</dt><dd>' + escapeHtml(v) + '</dd>';
+    }).join('');
+    document.getElementById('d-actions').innerHTML = actionsFor(r.status, 'drawer').map(function(a){
+      return '<button class="' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
+    }).join('');
+    drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); backdrop.classList.add('open');
+  }
+  function closeDrawer(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); backdrop.classList.remove('open'); currentId = null; }
+  document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+  backdrop.addEventListener('click', closeDrawer);
+
+  var STATUS_FOR_ACT = { approve:'承認済', deny:'否認', revert:'承認待' };
+  function doAction(id, act){
+    if (busy) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var r = ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    var newStatus = STATUS_FOR_ACT[act];
+    busy = true;
+    setButtonsDisabled(true);
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateShinseiStatus', token: idToken, appId: id, status: newStatus })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        busy = false; setButtonsDisabled(false);
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast((newStatus === '承認待' ? '承認待に差し戻しました' : newStatus + 'にしました') + '：' + r.name + '（' + id + '）');
+        if (currentId === id) closeDrawer();
+        loadShinseiList();
+      })
+      .catch(function(err){
+        busy = false; setButtonsDisabled(false);
+        showToast('通信エラーが発生しました。', true);
+      });
+  }
+  function setButtonsDisabled(disabled){
+    document.querySelectorAll('.rb, .drawer-actions button').forEach(function(b){ b.disabled = disabled; });
+  }
+
+  document.getElementById('tbody').addEventListener('click', function(e){
+    var actBtn = e.target.closest('[data-act]');
+    if (actBtn){ e.stopPropagation(); doAction(actBtn.dataset.id, actBtn.dataset.act); return; }
+    var tr = e.target.closest('tr'); if (tr) openDrawer(tr.dataset.id);
+  });
+  document.getElementById('d-actions').addEventListener('click', function(e){
+    var b = e.target.closest('[data-act]'); if (b) doAction(b.dataset.id, b.dataset.act);
+  });
+
+  var toastTimer;
+  function showToast(msg, isErr){
+    var t = document.getElementById('toast'); t.textContent = msg;
+    t.classList.toggle('err', !!isErr);
+    t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 3600);
+  }
+
+  var shinseiLoaded = false, dakokuLoaded = false, shuseiLoaded = false, zangyouLoaded = false, shainLoaded = false, yukyuLoaded = false, tokubetsuLoaded = false, dengonLoaded = false, gesshuLoaded = false, shuubetsuLoaded = false, dakokukakuninLoaded = false;
+  // ジャンプ＋絞り込み（ホーム画面の一覧から該当タブを開いて氏名等で絞り込む）のため、
+  // 各タブの初回読み込みのPromiseをここに保持する。既に読み込み済みのタブはresolve済みの
+  // ままなので、jumpToTabは毎回.then()するだけで「未読込なら待つ・既読込なら即実行」を両立できる
+  var tabReady = {};
+  // ホーム画面からのジャンプ中（btn.click()が絞り込み目的で呼ばれている間）だけtrueになる。
+  // これがtrueの間はクリックハンドラ側での絞り込み解除（resetTabFilter）をスキップし、
+  // jumpToTab側が意図した絞り込みをそのまま適用できるようにする
+  var isJumping = false;
+  document.querySelectorAll('.rail nav button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.rail nav button').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      ['home','shinsei','shusei','dakoku','shuukei','yukyu','tokubetsu','dengon','gesshu','shuubetsu','dakokukakunin','shain'].forEach(function(name){
+        document.getElementById('page-' + name).hidden = (name !== btn.dataset.nav);
+      });
+      // ホーム画面からのジャンプではなく、ナビを直接クリックしてタブを開いた場合は、
+      // 前回ジャンプ時に残っていた絞り込みを解除する（ユーザー指摘：「別のタブへ移動して
+      // また戻ってくると絞り込まれたままになっている」）
+      if (!isJumping) resetTabFilter(btn.dataset.nav);
+      // 各タブは初めて開いた時だけ読み込む（ログイン直後の表示を軽くするため）
+      if (btn.dataset.nav === 'shinsei' && !shinseiLoaded) { shinseiLoaded = true; tabReady.shinsei = loadShinseiList(); }
+      if (btn.dataset.nav === 'dakoku' && !dakokuLoaded) { dakokuLoaded = true; tabReady.dakoku = loadDakokuList(); }
+      if (btn.dataset.nav === 'shusei' && !shuseiLoaded) { shuseiLoaded = true; tabReady.shusei = loadShuuseiList(); }
+      if (btn.dataset.nav === 'shuukei' && !zangyouLoaded) { zangyouLoaded = true; tabReady.shuukei = loadZangyouList(); }
+      if (btn.dataset.nav === 'yukyu' && !yukyuLoaded) { yukyuLoaded = true; tabReady.yukyu = loadYukyuList(); }
+      if (btn.dataset.nav === 'tokubetsu' && !tokubetsuLoaded) { tokubetsuLoaded = true; loadTokubetsuList(); }
+      if (btn.dataset.nav === 'dengon' && !dengonLoaded) { dengonLoaded = true; loadDengonList(); }
+      if (btn.dataset.nav === 'gesshu' && !gesshuLoaded) { gesshuLoaded = true; loadGesshuList(); }
+      if (btn.dataset.nav === 'shuubetsu' && !shuubetsuLoaded) { shuubetsuLoaded = true; loadShuubetsuList(); }
+      if (btn.dataset.nav === 'dakokukakunin' && !dakokukakuninLoaded) { dakokukakuninLoaded = true; loadDakokuKakuninList(); }
+      if (btn.dataset.nav === 'shain' && !shainLoaded) { shainLoaded = true; loadShainList(); }
+    });
+  });
+
+  // ホーム画面の一覧から該当タブへ移動し、氏名（・状況）で絞り込む
+  function jumpToTab(tab, name, opts){
+    opts = opts || {};
+    isJumping = true;
+    var btn = document.querySelector('.rail nav button[data-nav="' + tab + '"]');
+    if (btn) btn.click();
+    var ready = tabReady[tab];
+    (ready || Promise.resolve()).then(function(){
+      applyJumpFilter(tab, name || '', opts);
+      isJumping = false;
+    });
+  }
+
+  // ナビを直接クリックしてタブを開いた時に、前回ジャンプ時の絞り込みが残らないよう初期状態へ戻す
+  function resetTabFilter(tab){
+    if (tab === 'shinsei') {
+      state.id = ''; state.name = ''; state.ykbn = ''; state.date = ''; state.type = ''; state.status = '';
+      document.getElementById('f-id').value = '';
+      document.getElementById('f-ykbn').value = '';
+      document.getElementById('f-type').value = '';
+      document.getElementById('f-date').value = '';
+      document.querySelectorAll('#f-status .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.status === '' ? 'true' : 'false'); });
+      if (ROWS.length) { populateFilterDropdowns(); render(); }
+    } else if (tab === 'shusei') {
+      sState.name = ''; sState.content = ''; sState.date = ''; sState.status = '';
+      document.getElementById('fs-content').value = '';
+      document.getElementById('fs-date').value = '';
+      document.querySelectorAll('#fs-status .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.status === '' ? 'true' : 'false'); });
+      if (SHUSEI_ROWS.length) { populateShuseiDropdown(); renderShusei(); }
+    } else if (tab === 'dakoku') {
+      dState.name = ''; dState.type = ''; dState.date = '';
+      document.getElementById('fd-type').value = '';
+      document.getElementById('fd-date').value = '';
+      if (DAKOKU_ROWS.length) { populateDakokuDropdown(); renderDakoku(); }
+    } else if (tab === 'shuukei') {
+      zState.name = '';
+      if (ZANGYOU_ROWS.length) { populateZangyouDropdown(); renderZangyou(); }
+    } else if (tab === 'yukyu') {
+      yState.name = '';
+      if (YUKYU_ROWS.length) { populateYukyuDropdown(); renderYukyu(); }
+    }
+  }
+
+  // ── 年度選択（過去の年度のスプレッドシートも閲覧できるようにする。2026-10-18新設） ──
+  function loadFiscalYears_(){
+    return fetch(GAS_URL + '?mode=portalFiscalYears&token=' + encodeURIComponent(idToken))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) return;
+        FISCAL_YEARS = data.years || [];
+        var sel = document.getElementById('fiscalyear-select');
+        sel.innerHTML = FISCAL_YEARS.map(function(y){
+          return '<option value="' + escapeHtml(y.ssId) + '">' + escapeHtml(y.label) + '</option>';
+        }).join('');
+        sel.value = currentSsId;
+      })
+      .catch(function(){});
+  }
+
+  // 年度を切り替えた時、今まで読み込んだ全タブのデータは古い年度のものなので「未読込」に戻し、
+  // 今開いているタブだけその場で読み直す（他のタブは次に開いた時に新しい年度で読み込まれる）
+  function resetAllTabsForYearChange_(){
+    shinseiLoaded = dakokuLoaded = shuseiLoaded = zangyouLoaded = shainLoaded = yukyuLoaded =
+      tokubetsuLoaded = dengonLoaded = gesshuLoaded = shuubetsuLoaded = dakokukakuninLoaded = false;
+    tabReady = {};
+    MONTHLY_LABELS = [];
+
+    var activeBtn = document.querySelector('.rail nav button.active');
+    var tab = activeBtn ? activeBtn.dataset.nav : 'home';
+    if (tab === 'home') { tabReady.home = loadHomeSummary(); }
+    else if (tab === 'shinsei') { shinseiLoaded = true; tabReady.shinsei = loadShinseiList(); }
+    else if (tab === 'dakoku') { dakokuLoaded = true; tabReady.dakoku = loadDakokuList(); }
+    else if (tab === 'shusei') { shuseiLoaded = true; tabReady.shusei = loadShuuseiList(); }
+    else if (tab === 'shuukei') { zangyouLoaded = true; tabReady.shuukei = loadZangyouList(); }
+    else if (tab === 'yukyu') { yukyuLoaded = true; tabReady.yukyu = loadYukyuList(); }
+    else if (tab === 'tokubetsu') { tokubetsuLoaded = true; loadTokubetsuList(); }
+    else if (tab === 'dengon') { dengonLoaded = true; loadDengonList(); }
+    else if (tab === 'gesshu') { gesshuLoaded = true; loadGesshuList(); }
+    else if (tab === 'shuubetsu') { shuubetsuLoaded = true; loadShuubetsuList(); }
+    else if (tab === 'dakokukakunin') { dakokukakuninLoaded = true; loadDakokuKakuninList(); }
+    else if (tab === 'shain') { shainLoaded = true; loadShainList(); }
+  }
+
+  document.getElementById('fiscalyear-select').addEventListener('change', function(e){
+    currentSsId = e.target.value;
+    isPastYearView = !!currentSsId;
+    document.body.classList.toggle('pastyear', isPastYearView);
+    showToast(isPastYearView ? '過去の年度を表示しています（閲覧専用）' : '現在の年度に戻りました');
+    resetAllTabsForYearChange_();
+  });
+
+  function applyJumpFilter(tab, name, opts){
+    if (tab === 'shinsei') {
+      state.name = name;
+      if (opts.status !== undefined) {
+        state.status = opts.status;
+        document.querySelectorAll('#f-status .pill').forEach(function(b){
+          b.setAttribute('aria-pressed', b.dataset.status === opts.status ? 'true' : 'false');
+        });
+      }
+      populateFilterDropdowns(); render();
+    } else if (tab === 'shusei') {
+      sState.name = name;
+      if (opts.status !== undefined) {
+        sState.status = opts.status;
+        document.querySelectorAll('#fs-status .pill').forEach(function(b){
+          b.setAttribute('aria-pressed', b.dataset.status === opts.status ? 'true' : 'false');
+        });
+      }
+      populateShuseiDropdown(); renderShusei();
+    } else if (tab === 'dakoku') {
+      dState.name = name;
+      if (opts.date) { dState.date = opts.date; document.getElementById('fd-date').value = opts.date; }
+      populateDakokuDropdown(); renderDakoku();
+    } else if (tab === 'shuukei') {
+      zState.name = name; populateZangyouDropdown(); renderZangyou();
+    } else if (tab === 'yukyu') {
+      yState.name = name; populateYukyuDropdown(); renderYukyu();
+    }
+  }
+
+  function loadShinseiList(){
+    document.getElementById('resultcount').textContent = '読み込み中…';
+    return fetch(portalApiUrl_('portalShinseiList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || '一覧の取得に失敗しました。', true); return; }
+        ROWS = (data.rows || []).map(function(r){
+          r.detail = buildDetail(r);
+          return r;
+        });
+        populateFilterDropdowns();
+        render();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 打刻ログ（簡易検索。打刻確認シートの月次異常表示を置き換えるものではない） ──
+  var DAKOKU_ROWS = [];
+  var dState = { name:'', type:'', date:'' };
+
+  function dMatches(r){
+    if (dState.name && r.name !== dState.name) return false;
+    if (dState.type && r.dakokuType !== dState.type) return false;
+    if (dState.date && normDate(r.dakokuDateTime).indexOf(normDate(dState.date)) !== 0) return false;
+    return true;
+  }
+
+  function populateDakokuDropdown(){
+    var nameSel = document.getElementById('fd-name');
+    var names = Array.from(new Set(DAKOKU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(dState.name) !== -1 ? dState.name : '';
+    dState.name = nameSel.value;
+  }
+
+  var DAKOKU_TYPE_CLASS = {'出勤':'type-shukkin', '退勤':'type-taikin', '外出':'type-gaishutsu', '帰社':'type-kisha'};
+  function renderDakoku(){
+    var tbody = document.getElementById('dakoku-tbody');
+    var filtered = DAKOKU_ROWS.filter(dMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      if (DAKOKU_TYPE_CLASS[r.dakokuType]) tr.className = DAKOKU_TYPE_CLASS[r.dakokuType];
+      tr.innerHTML =
+        '<td class="mono">' + escapeHtml(r.dakokuDateTime) + '</td>' +
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(r.dakokuType) + '</td>' +
+        '<td class="mono">' + escapeHtml(r.jissaiTime || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.shuukeiTime || '—') + '</td>' +
+        '<td>' + escapeHtml(r.biko || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('dakoku-emptystate').hidden = filtered.length > 0;
+    document.getElementById('dakoku-resultcount').textContent = filtered.length + ' 件（全' + DAKOKU_ROWS.length + '件中）';
+  }
+
+  document.getElementById('fd-name').addEventListener('change', function(e){ dState.name = e.target.value; renderDakoku(); });
+  document.getElementById('fd-type').addEventListener('change', function(e){ dState.type = e.target.value; renderDakoku(); });
+  document.getElementById('fd-date').addEventListener('change', function(e){ dState.date = e.target.value; renderDakoku(); });
+  document.getElementById('dakoku-refresh').addEventListener('click', function(){ loadDakokuList(); });
+
+  function loadDakokuList(){
+    document.getElementById('dakoku-resultcount').textContent = '読み込み中…';
+    return fetch(portalApiUrl_('portalDakokuList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || '打刻ログの取得に失敗しました。', true); return; }
+        DAKOKU_ROWS = data.rows || [];
+        populateDakokuDropdown();
+        renderDakoku();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 修正依頼（申請一覧と同じ承認/否認/差し戻しの仕組み） ──
+  var SHUSEI_ROWS = [];
+  var sState = { name:'', content:'', date:'', status:'' };
+  var sCurrentId = null;
+
+  function buildShuseiDetail(r){ return r.content + (r.addType ? '（' + r.addType + '）' : ''); }
+
+  function sMatches(r){
+    if (sState.status && r.status !== sState.status) return false;
+    if (sState.content && r.content !== sState.content) return false;
+    if (sState.name && r.name !== sState.name) return false;
+    if (sState.date && normDate(r.taishouDate).indexOf(normDate(sState.date)) !== 0) return false;
+    return true;
+  }
+
+  function populateShuseiDropdown(){
+    var nameSel = document.getElementById('fs-name');
+    var names = Array.from(new Set(SHUSEI_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(sState.name) !== -1 ? sState.name : '';
+    sState.name = nameSel.value;
+  }
+
+  function renderShusei(){
+    var tbody = document.getElementById('shusei-tbody');
+    var filtered = SHUSEI_ROWS.filter(sMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.id = r.appId;
+      var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
+      tr.className = 'row-' + st[0];
+      var btns = actionsFor(r.status, 'row').map(function(a){
+        return '<button class="rb ' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
+      }).join('');
+      tr.innerHTML =
+        '<td class="mono">' + escapeHtml(r.appId) + '</td>' +
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(buildShuseiDetail(r)) + '</td>' +
+        '<td class="mono">' + escapeHtml(r.taishouDate || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.jissaiTime || '—') + '</td>' +
+        '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
+        '<td><div class="rowbtns">' + btns + '</div></td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('shusei-emptystate').hidden = filtered.length > 0;
+    document.getElementById('shusei-resultcount').textContent = filtered.length + ' 件（全' + SHUSEI_ROWS.length + '件中）';
+  }
+
+  document.getElementById('fs-name').addEventListener('change', function(e){ sState.name = e.target.value; renderShusei(); });
+  document.getElementById('fs-content').addEventListener('change', function(e){ sState.content = e.target.value; renderShusei(); });
+  document.getElementById('fs-date').addEventListener('change', function(e){ sState.date = e.target.value; renderShusei(); });
+  document.getElementById('fs-status').addEventListener('click', function(e){
+    var btn = e.target.closest('.pill'); if (!btn) return;
+    document.querySelectorAll('#fs-status .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true'); sState.status = btn.dataset.status; renderShusei();
+  });
+  document.getElementById('shusei-refresh').addEventListener('click', function(){ loadShuuseiList(); });
+
+  var sDrawer = document.getElementById('s-drawer'), sBackdrop = document.getElementById('s-backdrop');
+  function openShuseiDrawer(id){
+    var r = SHUSEI_ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    sCurrentId = id;
+    document.getElementById('s-name').textContent = r.name;
+    document.getElementById('s-appid').textContent = id;
+    document.getElementById('s-appdt').textContent = r.appDateTime || '—';
+    document.getElementById('s-content').textContent = buildShuseiDetail(r);
+    document.getElementById('s-date').textContent = r.taishouDate || '—';
+    document.getElementById('s-jissai').textContent = r.jissaiTime || '—';
+    var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
+    document.getElementById('s-status').innerHTML = '<span class="stamp ' + st[0] + '">' + st[1] + '</span>';
+    document.getElementById('s-reason').textContent = r.riyu || '（記入なし）';
+    document.getElementById('s-extra').innerHTML = r.autoResult
+      ? ('<dt>自動処理結果</dt><dd>' + escapeHtml(r.autoResult) + '</dd>') : '';
+    document.getElementById('s-actions').innerHTML = actionsFor(r.status, 'drawer').map(function(a){
+      return '<button class="' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
+    }).join('');
+    sDrawer.classList.add('open'); sDrawer.setAttribute('aria-hidden','false'); sBackdrop.classList.add('open');
+  }
+  function closeShuseiDrawer(){ sDrawer.classList.remove('open'); sDrawer.setAttribute('aria-hidden','true'); sBackdrop.classList.remove('open'); sCurrentId = null; }
+  document.getElementById('s-drawer-close').addEventListener('click', closeShuseiDrawer);
+  sBackdrop.addEventListener('click', closeShuseiDrawer);
+
+  function doShuseiAction(id, act){
+    if (busy) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var r = SHUSEI_ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    var newStatus = STATUS_FOR_ACT[act];
+    busy = true;
+    setButtonsDisabled(true);
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateShuuseiStatus', token: idToken, appId: id, status: newStatus })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        busy = false; setButtonsDisabled(false);
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast((newStatus === '承認待' ? '承認待に差し戻しました' : newStatus + 'にしました') + '：' + r.name + '（' + id + '）');
+        if (sCurrentId === id) closeShuseiDrawer();
+        loadShuuseiList();
+      })
+      .catch(function(){ busy = false; setButtonsDisabled(false); showToast('通信エラーが発生しました。', true); });
+  }
+
+  document.getElementById('shusei-tbody').addEventListener('click', function(e){
+    var actBtn = e.target.closest('[data-act]');
+    if (actBtn){ e.stopPropagation(); doShuseiAction(actBtn.dataset.id, actBtn.dataset.act); return; }
+    var tr = e.target.closest('tr'); if (tr) openShuseiDrawer(tr.dataset.id);
+  });
+  document.getElementById('s-actions').addEventListener('click', function(e){
+    var b = e.target.closest('[data-act]'); if (b) doShuseiAction(b.dataset.id, b.dataset.act);
+  });
+
+  function loadShuuseiList(){
+    document.getElementById('shusei-resultcount').textContent = '読み込み中…';
+    return fetch(portalApiUrl_('portalShuuseiList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || '修正依頼一覧の取得に失敗しました。', true); return; }
+        SHUSEI_ROWS = data.rows || [];
+        populateShuseiDropdown();
+        renderShusei();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 36協定（閲覧専用。年間残業・36協定シートをそのまま表示） ──
+  var ZANGYOU_ROWS = [];
+  var zState = { name:'' };
+  var CURRENT_MONTH_IDX = new Date().getMonth(); // 0始まり（配列インデックスと一致）
+  var KYOTEI_NEN_MIN = 360 * 60; // 36協定：年間上限（RULE.KYOTEI_NEN_H、設定.gs）
+  var KYOTEI_TSUKI_60H_MIN = 60 * 60; // 月60h超（割増率変更ライン）
+
+  function zMatches(r){ return !zState.name || r.name === zState.name; }
+
+  // "50:00"のようなhh:mm文字列を分に変換（空欄はnull）
+  function hhmmToMin_(s){
+    if (!s) return null;
+    var m = String(s).match(/^(\d+):(\d\d)$/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+  function minToHhmm_(min){
+    var h = Math.floor(min / 60), m = min % 60;
+    return h + ':' + String(m).padStart(2, '0');
+  }
+
+  // 年間残業累計・36協定年間残り・月60h超累計は、シート側のD〜F列をそのまま信用せず、
+  // 月別12ヶ月分（G〜R列）から都度このポータル側で計算し直す。D〜F列はcheck36Alertが
+  // 対象月を処理した時にしか更新されないため、表示中の月別内訳と数字が食い違って見える
+  // ことがあった（ユーザー指摘：「年間残業合計が合計されていない」）
+  function computeZangyouStats(r){
+    var sumMin = 0, excess60Min = 0;
+    r.monthly.forEach(function(m){
+      var mm = hhmmToMin_(m.value) || 0;
+      sumMin += mm;
+      if (mm > KYOTEI_TSUKI_60H_MIN) excess60Min += (mm - KYOTEI_TSUKI_60H_MIN);
+    });
+    return { sumMin: sumMin, zan36Min: Math.max(0, KYOTEI_NEN_MIN - sumMin), excess60Min: excess60Min };
+  }
+
+  function populateZangyouDropdown(){
+    var nameSel = document.getElementById('fz-name');
+    var names = Array.from(new Set(ZANGYOU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(zState.name) !== -1 ? zState.name : '';
+    zState.name = nameSel.value;
+  }
+
+  function renderZangyou(){
+    var tbody = document.getElementById('zangyou-tbody');
+    var filtered = ZANGYOU_ROWS.filter(zMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.email = r.email;
+      var stats = computeZangyouStats(r);
+      // 36協定年間残り50時間未満は赤、月60h超累計が0超はオレンジ（GAS側の色分けと同じ基準）
+      var zan36Class = stats.zan36Min < 50 * 60 ? 'warn-bad' : '';
+      var excessClass = stats.excess60Min > 0 ? 'warn-caution' : '';
+      // 行全体も同じ基準で薄く色付けして、警告対象をスクロール中でも見つけやすくする
+      tr.className = zan36Class ? 'row-denied' : (excessClass ? 'row-pending' : '');
+      var curMonth = r.monthly[CURRENT_MONTH_IDX];
+      // 36協定年間残りが少ない・月60h超累計があるものはバッジ表示にして、色だけの警告より
+      // 目立たせる（ユーザー要望：「色や枠線をフル活用して見やすくおしゃれに」）
+      var zan36Html = zan36Class
+        ? '<span class="levelbadge l60">' + minToHhmm_(stats.zan36Min) + '</span>'
+        : minToHhmm_(stats.zan36Min);
+      var excessHtml = excessClass
+        ? '<span class="levelbadge l45">' + minToHhmm_(stats.excess60Min) + '</span>'
+        : '—';
+      tr.innerHTML =
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td class="zone-end">' + kbnBadge_(r.koyouKbn) + '</td>' +
+        '<td class="mono z36-nenkan">' + minToHhmm_(stats.sumMin) + '</td>' +
+        '<td class="mono z36-nenkan">' + zan36Html + '</td>' +
+        '<td class="mono z36-nenkan zone-end">' + excessHtml + '</td>' +
+        '<td class="mono z36-tsukigetsu">' + escapeHtml((curMonth && curMonth.value) || '—') + '</td>' +
+        '<td class="mono z36-tsukigetsu">' + escapeHtml(r.heikin || '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('zangyou-emptystate').hidden = filtered.length > 0;
+    document.getElementById('zangyou-resultcount').textContent = filtered.length + ' 名（全' + ZANGYOU_ROWS.length + '名中）';
+  }
+
+  document.getElementById('fz-name').addEventListener('change', function(e){ zState.name = e.target.value; renderZangyou(); });
+  document.getElementById('zangyou-refresh').addEventListener('click', function(){ loadZangyouList(); });
+
+  var zDrawer = document.getElementById('z-drawer'), zBackdrop = document.getElementById('z-backdrop');
+  function openZangyouDrawer(email){
+    var r = ZANGYOU_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
+    var stats = computeZangyouStats(r);
+    document.getElementById('z-name').textContent = r.name;
+    document.getElementById('z-koyou').innerHTML = kbnBadge_(r.koyouKbn);
+    document.getElementById('z-nenkan').textContent = minToHhmm_(stats.sumMin);
+    document.getElementById('z-zan36').textContent = minToHhmm_(stats.zan36Min);
+    document.getElementById('z-excess60').textContent = stats.excess60Min > 0 ? minToHhmm_(stats.excess60Min) : '—';
+    document.getElementById('z-heikin').textContent = r.heikin || '—';
+    document.getElementById('z-months').innerHTML = r.monthly.map(function(m, idx){
+      return '<div class="mbox' + (idx === CURRENT_MONTH_IDX ? ' current' : '') + '">' +
+        '<div class="ml">' + escapeHtml(m.label) + '</div><div class="mv">' + escapeHtml(m.value || '—') + '</div></div>';
+    }).join('');
+    zDrawer.classList.add('open'); zDrawer.setAttribute('aria-hidden','false'); zBackdrop.classList.add('open');
+  }
+  function closeZangyouDrawer(){ zDrawer.classList.remove('open'); zDrawer.setAttribute('aria-hidden','true'); zBackdrop.classList.remove('open'); }
+  document.getElementById('z-drawer-close').addEventListener('click', closeZangyouDrawer);
+  zBackdrop.addEventListener('click', closeZangyouDrawer);
+  document.getElementById('zangyou-tbody').addEventListener('click', function(e){
+    var tr = e.target.closest('tr'); if (tr) openZangyouDrawer(tr.dataset.email);
+  });
+
+  function loadZangyouList(){
+    document.getElementById('zangyou-resultcount').textContent = '読み込み中…';
+    return fetch(portalApiUrl_('portalZangyou36List'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        ZANGYOU_ROWS = data.rows || [];
+        populateZangyouDropdown();
+        renderZangyou();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 社員マスタ（閲覧専用。Webhook URL等の機密情報はサーバー側で除外済み） ──
+  var SHAIN_ROWS = [];
+  var mState = { name:'', koyou:'' };
+
+  function mMatches(r){
+    if (mState.koyou && r.koyouKbn !== mState.koyou) return false;
+    if (mState.name && r.name !== mState.name) return false;
+    return true;
+  }
+
+  function populateShainDropdown(){
+    var nameSel = document.getElementById('fm-name');
+    var names = Array.from(new Set(SHAIN_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(mState.name) !== -1 ? mState.name : '';
+    mState.name = nameSel.value;
+  }
+
+  function renderShain(){
+    var tbody = document.getElementById('shain-tbody');
+    var filtered = SHAIN_ROWS.filter(mMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.email = r.email;
+      tr.innerHTML =
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + kbnBadge_(r.koyouKbn) + '</td>' +
+        '<td class="mono">' + escapeHtml(r.teijiStart || '—') + '〜' + escapeHtml(r.teijiEnd || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.nyushaDate || '—') + '</td>' +
+        '<td>' + escapeHtml(r.workDays || '毎平日') + '</td>' +
+        '<td>' + (r.isTestSanka ? '<span class="statuspill approved">対象</span>' : '—') + '</td>' +
+        '<td>' + escapeHtml(r.biko || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('shain-emptystate').hidden = filtered.length > 0;
+    document.getElementById('shain-resultcount').textContent = filtered.length + ' 名（全' + SHAIN_ROWS.length + '名中）';
+  }
+
+  document.getElementById('fm-name').addEventListener('change', function(e){ mState.name = e.target.value; renderShain(); });
+  document.getElementById('fm-koyou').addEventListener('change', function(e){ mState.koyou = e.target.value; renderShain(); });
+  document.getElementById('shain-refresh').addEventListener('click', function(){ loadShainList(); });
+
+  var mDrawer = document.getElementById('m-drawer'), mBackdrop = document.getElementById('m-backdrop');
+  function openShainDrawer(email){
+    var r = SHAIN_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
+    document.getElementById('m-name').textContent = r.name;
+    document.getElementById('m-furigana').textContent = r.furigana || '—';
+    document.getElementById('m-email').textContent = r.email;
+    document.getElementById('m-koyou').innerHTML = kbnBadge_(r.koyouKbn);
+    document.getElementById('m-teiji').textContent = (r.teijiStart || '—') + '〜' + (r.teijiEnd || '—');
+    document.getElementById('m-nyusha').textContent = r.nyushaDate || '—';
+    document.getElementById('m-workdays').textContent = r.workDays || '毎平日';
+    document.getElementById('m-dokuji').textContent = r.isDokujirule ? '対象' : '対象外';
+    document.getElementById('m-testsanka').textContent = r.isTestSanka ? '対象' : '対象外';
+    document.getElementById('m-nfc').textContent = r.nfcId || '—';
+    document.getElementById('m-biko').textContent = r.biko || '（記入なし）';
+    mDrawer.classList.add('open'); mDrawer.setAttribute('aria-hidden','false'); mBackdrop.classList.add('open');
+  }
+  function closeShainDrawer(){ mDrawer.classList.remove('open'); mDrawer.setAttribute('aria-hidden','true'); mBackdrop.classList.remove('open'); }
+  document.getElementById('m-drawer-close').addEventListener('click', closeShainDrawer);
+  mBackdrop.addEventListener('click', closeShainDrawer);
+  document.getElementById('shain-tbody').addEventListener('click', function(e){
+    var tr = e.target.closest('tr'); if (tr) openShainDrawer(tr.dataset.email);
+  });
+
+  function loadShainList(){
+    document.getElementById('shain-resultcount').textContent = '読み込み中…';
+    fetch(portalApiUrl_('portalShainList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || '社員マスタの取得に失敗しました。', true); return; }
+        SHAIN_ROWS = data.rows || [];
+        populateShainDropdown();
+        renderShain();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 有給管理（閲覧専用） ──
+  var YUKYU_ROWS = [];
+  var yState = { name:'' };
+
+  function yMatches(r){ return !yState.name || r.name === yState.name; }
+
+  function populateYukyuDropdown(){
+    var nameSel = document.getElementById('fy-name');
+    var names = Array.from(new Set(YUKYU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(yState.name) !== -1 ? yState.name : '';
+    yState.name = nameSel.value;
+  }
+
+  // シートと同じ小数点以下2桁まで表示する（以前は1桁に丸めてしまい、29.25→29.3のように
+  // シートの実際の値とズレて見えていた。ユーザー指摘）
+  function fmtDay_(n){ return (Math.round(n * 100) / 100) + '日'; }
+
+  function renderYukyu(){
+    var tbody = document.getElementById('yukyu-tbody');
+    var filtered = YUKYU_ROWS.filter(yMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.email = r.email;
+      // 通常有給残日数5日未満は赤バッジ（ホームシート「③有給残日数が少ない社員」と同じ基準）。
+      // 列の色分け（通常有給/積立有給）と衝突しないよう、行全体の色付けではなくこのセルだけ
+      // バッジにする（ユーザー要望：「注意や警告は別の方法で分けたい」）
+      var zanzanHtml = r.zanzanNissu < 5
+        ? '<span class="levelbadge l60">' + fmtDay_(r.zanzanNissu) + '</span>'
+        : fmtDay_(r.zanzanNissu);
+      tr.innerHTML =
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td class="mono zone-end">' + escapeHtml(r.kinzokuNen || '—') + '</td>' +
+        '<td class="mono yukyu-normal">' + fmtDay_(r.fuyoNissu) + '</td>' +
+        '<td class="mono yukyu-normal">' + zanzanHtml + '</td>' +
+        '<td class="mono yukyu-normal zone-end">' + fmtDay_(r.shokaNissu) + '</td>' +
+        '<td class="mono yukyu-tsumitate">' + fmtDay_(r.tsumitateZan) + '</td>' +
+        '<td class="mono yukyu-tsumitate">' + fmtDay_(r.tsumitateShoka) + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('yukyu-emptystate').hidden = filtered.length > 0;
+    document.getElementById('yukyu-resultcount').textContent = filtered.length + ' 名（全' + YUKYU_ROWS.length + '名中）';
+  }
+
+  document.getElementById('fy-name').addEventListener('change', function(e){ yState.name = e.target.value; renderYukyu(); });
+  document.getElementById('yukyu-refresh').addEventListener('click', function(){ loadYukyuList(); });
+
+  var yDrawer = document.getElementById('y-drawer'), yBackdrop = document.getElementById('y-backdrop');
+  function openYukyuDrawer(email){
+    var r = YUKYU_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
+    document.getElementById('y-name').textContent = r.name;
+    document.getElementById('y-kinzoku').textContent = '勤続' + (r.kinzokuNen || '—');
+    document.getElementById('y-fuyo').textContent = fmtDay_(r.fuyoNissu);
+    document.getElementById('y-fuyozen').textContent = fmtDay_(r.fuyoZennen);
+    document.getElementById('y-kurikoshi').textContent = fmtDay_(r.kurikoshi);
+    document.getElementById('y-shoka').textContent = fmtDay_(r.shokaNissu);
+    document.getElementById('y-zanzan').textContent = fmtDay_(r.zanzanNissu);
+    document.getElementById('y-tkurikoshi').textContent = fmtDay_(r.tsumitateKurikoshi);
+    document.getElementById('y-tido').textContent = fmtDay_(r.tsumitateIdo);
+    document.getElementById('y-tshoka').textContent = fmtDay_(r.tsumitateShoka);
+    document.getElementById('y-tzan').textContent = fmtDay_(r.tsumitateZan);
+    yDrawer.classList.add('open'); yDrawer.setAttribute('aria-hidden','false'); yBackdrop.classList.add('open');
+  }
+  function closeYukyuDrawer(){ yDrawer.classList.remove('open'); yDrawer.setAttribute('aria-hidden','true'); yBackdrop.classList.remove('open'); }
+  document.getElementById('y-drawer-close').addEventListener('click', closeYukyuDrawer);
+  yBackdrop.addEventListener('click', closeYukyuDrawer);
+  document.getElementById('yukyu-tbody').addEventListener('click', function(e){
+    var tr = e.target.closest('tr'); if (tr) openYukyuDrawer(tr.dataset.email);
+  });
+
+  function loadYukyuList(){
+    document.getElementById('yukyu-resultcount').textContent = '読み込み中…';
+    return fetch(portalApiUrl_('portalYukyuList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        YUKYU_ROWS = data.rows || [];
+        populateYukyuDropdown();
+        renderYukyu();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 特別休暇管理（閲覧専用） ──
+  var TOKU_ROWS = [];
+  var tState = { name:'', type:'' };
+  var TOKU_TYPE_CLASS = {
+    '特別休暇（弔事）':'tk-choji', '特別休暇（慶事）':'tk-keiji',
+    '傷病等特別休暇':'tk-shobyo', '積立有給':'tk-tsumitate'
+  };
+
+  function tMatches(r){
+    if (tState.type && r.shinsei !== tState.type) return false;
+    if (tState.name && r.name !== tState.name) return false;
+    return true;
+  }
+
+  function populateTokubetsuDropdown(){
+    var nameSel = document.getElementById('ft-name');
+    var names = Array.from(new Set(TOKU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(tState.name) !== -1 ? tState.name : '';
+    tState.name = nameSel.value;
+  }
+
+  function renderTokubetsu(){
+    var tbody = document.getElementById('tokubetsu-tbody');
+    var filtered = TOKU_ROWS.filter(tMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.id = r.appId;
+      if (TOKU_TYPE_CLASS[r.shinsei]) tr.className = TOKU_TYPE_CLASS[r.shinsei];
+      tr.innerHTML =
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(r.shinsei) + '</td>' +
+        '<td class="txtleft">' + escapeHtml(r.detail || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.kisanDate || '—') + '</td>' +
+        '<td class="mono">' + fmtDay_(r.fuyoNissu) + '</td>' +
+        '<td class="mono">' + fmtDay_(r.shokaNissu) + '</td>' +
+        '<td class="mono">' + fmtDay_(r.zanNissu) + '</td>' +
+        '<td class="mono">' + escapeHtml(r.kigen || '—') + '</td>' +
+        '<td>' + (r.chouka ? '<span class="choukabadge">' + escapeHtml(r.chouka) + '</span>' : '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('tokubetsu-emptystate').hidden = filtered.length > 0;
+    document.getElementById('tokubetsu-resultcount').textContent = filtered.length + ' 件（全' + TOKU_ROWS.length + '件中）';
+  }
+
+  document.getElementById('ft-name').addEventListener('change', function(e){ tState.name = e.target.value; renderTokubetsu(); });
+  document.getElementById('ft-type').addEventListener('change', function(e){ tState.type = e.target.value; renderTokubetsu(); });
+  document.getElementById('tokubetsu-refresh').addEventListener('click', function(){ loadTokubetsuList(); });
+
+  var tDrawer = document.getElementById('t-drawer'), tBackdrop = document.getElementById('t-backdrop');
+  function openTokubetsuDrawer(id){
+    var r = TOKU_ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    document.getElementById('t-name').textContent = r.name;
+    document.getElementById('t-appid').textContent = id;
+    document.getElementById('t-appdt').textContent = r.appDateTime || '—';
+    document.getElementById('t-shinsei').textContent = r.shinsei;
+    document.getElementById('t-detail').textContent = r.detail || '—';
+    document.getElementById('t-kisan').textContent = r.kisanDate || '—';
+    document.getElementById('t-fuyo').textContent = fmtDay_(r.fuyoNissu);
+    document.getElementById('t-shoka').textContent = fmtDay_(r.shokaNissu);
+    document.getElementById('t-zan').textContent = fmtDay_(r.zanNissu);
+    document.getElementById('t-kigen').textContent = r.kigen || '—';
+    document.getElementById('t-chouka').innerHTML = r.chouka ? '<span class="choukabadge">' + escapeHtml(r.chouka) + '</span>' : '—';
+    document.getElementById('t-biko').textContent = r.biko || '（記入なし）';
+    tDrawer.classList.add('open'); tDrawer.setAttribute('aria-hidden','false'); tBackdrop.classList.add('open');
+  }
+  function closeTokubetsuDrawer(){ tDrawer.classList.remove('open'); tDrawer.setAttribute('aria-hidden','true'); tBackdrop.classList.remove('open'); }
+  document.getElementById('t-drawer-close').addEventListener('click', closeTokubetsuDrawer);
+  tBackdrop.addEventListener('click', closeTokubetsuDrawer);
+  document.getElementById('tokubetsu-tbody').addEventListener('click', function(e){
+    var tr = e.target.closest('tr'); if (tr) openTokubetsuDrawer(tr.dataset.id);
+  });
+
+  function loadTokubetsuList(){
+    document.getElementById('tokubetsu-resultcount').textContent = '読み込み中…';
+    fetch(portalApiUrl_('portalTokubetsuList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        TOKU_ROWS = data.rows || [];
+        populateTokubetsuDropdown();
+        renderTokubetsu();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 伝言板（閲覧＋新規作成） ──
+  var DENGON_ROWS = [];
+  var dgState = { name:'', status:'' };
+  var DG_STATUS_CLASS = { '表示':'dg-hyouji', '済':'dg-sumi' };
+  var DG_STATUS_LABEL = { '表示':'未確認', '済':'確認済み' };
+
+  function dgMatches(r){
+    if (dgState.status && r.showFlag !== dgState.status) return false;
+    if (dgState.name && r.name !== dgState.name) return false;
+    return true;
+  }
+
+  function populateDengonDropdown(){
+    var nameSel = document.getElementById('fdg-name');
+    var names = Array.from(new Set(DENGON_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(dgState.name) !== -1 ? dgState.name : '';
+    dgState.name = nameSel.value;
+  }
+
+  function dgBadge(flag){
+    var cls = flag === '表示' ? 'hyouji' : flag === '済' ? 'sumi' : '';
+    var label = DG_STATUS_LABEL[flag] || flag || '—';
+    return cls ? '<span class="dgbadge ' + cls + '">' + escapeHtml(label) + '</span>' : escapeHtml(label);
+  }
+
+  function renderDengon(){
+    var tbody = document.getElementById('dengon-tbody');
+    var filtered = DENGON_ROWS.filter(dgMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.dataset.id = r.msgId;
+      if (DG_STATUS_CLASS[r.showFlag]) tr.className = DG_STATUS_CLASS[r.showFlag];
+      tr.innerHTML =
+        '<td>' + dgBadge(r.showFlag) + '</td>' +
+        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(r.sender || '—') + '</td>' +
+        '<td class="txtleft">' + escapeHtml(r.content || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.entryDate || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.confirmDate || '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('dengon-emptystate').hidden = filtered.length > 0;
+    document.getElementById('dengon-resultcount').textContent = filtered.length + ' 件（全' + DENGON_ROWS.length + '件中）';
+  }
+
+  document.getElementById('fdg-name').addEventListener('change', function(e){ dgState.name = e.target.value; renderDengon(); });
+  document.getElementById('fdg-status').addEventListener('change', function(e){ dgState.status = e.target.value; renderDengon(); });
+  document.getElementById('dengon-refresh').addEventListener('click', function(){ loadDengonList(); });
+
+  var ddDrawer = document.getElementById('dd-drawer'), ddBackdrop = document.getElementById('dd-backdrop');
+  function openDengonDetail(id){
+    var r = DENGON_ROWS.find(function(x){ return x.msgId === id; }); if (!r) return;
+    document.getElementById('dd-name').textContent = r.name;
+    document.getElementById('dd-msgid').textContent = id;
+    document.getElementById('dd-sender').textContent = r.sender || '—';
+    document.getElementById('dd-content').textContent = r.content || '（内容なし）';
+    document.getElementById('dd-entrydate').textContent = r.entryDate || '—';
+    document.getElementById('dd-status').innerHTML = dgBadge(r.showFlag);
+    document.getElementById('dd-confirmdate').textContent = r.confirmDate || '—';
+    ddDrawer.classList.add('open'); ddDrawer.setAttribute('aria-hidden','false'); ddBackdrop.classList.add('open');
+  }
+  function closeDengonDetail(){ ddDrawer.classList.remove('open'); ddDrawer.setAttribute('aria-hidden','true'); ddBackdrop.classList.remove('open'); }
+  document.getElementById('dd-drawer-close').addEventListener('click', closeDengonDetail);
+  ddBackdrop.addEventListener('click', closeDengonDetail);
+  document.getElementById('dengon-tbody').addEventListener('click', function(e){
+    var tr = e.target.closest('tr'); if (tr) openDengonDetail(tr.dataset.id);
+  });
+
+  // 新規作成フォームの宛先氏名は、伝言板に実績がある人だけでなく全社員から選べるようにする
+  // ため、社員マスタ（社員マスタタブと共通のSHAIN_ROWS）を未読み込みならここで取得する
+  function ensureShainRowsLoaded_(cb){
+    if (SHAIN_ROWS.length > 0) { cb(); return; }
+    fetch(portalApiUrl_('portalShainList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){ if (data.success) SHAIN_ROWS = data.rows || []; cb(); })
+      .catch(function(){ cb(); });
+  }
+
+  var dcDrawer = document.getElementById('dc-drawer'), dcBackdrop = document.getElementById('dc-backdrop');
+  function openDengonComposer(){
+    var sel = document.getElementById('dc-name');
+    sel.innerHTML = '<option value="">読み込み中…</option>';
+    ensureShainRowsLoaded_(function(){
+      var names = SHAIN_ROWS.map(function(r){ return r.name; }).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+      sel.innerHTML = '<option value="">選択してください</option>' +
+        names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    });
+    document.getElementById('dc-sender').value = myName || '';
+    document.getElementById('dc-content').value = '';
+    dcDrawer.classList.add('open'); dcDrawer.setAttribute('aria-hidden','false'); dcBackdrop.classList.add('open');
+  }
+  function closeDengonComposer(){ dcDrawer.classList.remove('open'); dcDrawer.setAttribute('aria-hidden','true'); dcBackdrop.classList.remove('open'); }
+  document.getElementById('dengon-new').addEventListener('click', openDengonComposer);
+  document.getElementById('dc-drawer-close').addEventListener('click', closeDengonComposer);
+  dcBackdrop.addEventListener('click', closeDengonComposer);
+
+  var dgSending = false;
+  document.getElementById('dc-send').addEventListener('click', function(){
+    if (dgSending) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var name    = document.getElementById('dc-name').value;
+    var sender  = document.getElementById('dc-sender').value.trim();
+    var content = document.getElementById('dc-content').value.trim();
+    if (!name || !sender || !content) { showToast('宛先・送信者・メッセージ内容は必須です。', true); return; }
+    dgSending = true;
+    var btn = document.getElementById('dc-send'); btn.disabled = true;
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'createDengon', token: idToken, name: name, sender: sender, content: content })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        dgSending = false; btn.disabled = false;
+        if (!data.success) { showToast(data.message || '送信に失敗しました。', true); return; }
+        showToast('伝言を送信しました：' + name);
+        closeDengonComposer();
+        loadDengonList();
+      })
+      .catch(function(){ dgSending = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
+  });
+
+  function loadDengonList(){
+    document.getElementById('dengon-resultcount').textContent = '読み込み中…';
+    fetch(portalApiUrl_('portalDengonList'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        DENGON_ROWS = data.rows || [];
+        populateDengonDropdown();
+        renderDengon();
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── 月次集計・週別実働・打刻確認（月ごとに別シートのため共通の月選択が必要） ──
+  // 月次集計シートの名前から拾った月ラベル一覧（週別実働・打刻確認も同時に作られるため共通で使う）
+  var MONTHLY_LABELS = [];
+  function ensureMonthlyLabelsLoaded_(cb){
+    if (MONTHLY_LABELS.length > 0) { cb(); return; }
+    fetch(portalApiUrl_('portalMonthlyLabels'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){ if (data.success) MONTHLY_LABELS = data.labels || []; cb(); })
+      .catch(function(){ cb(); });
+  }
+  // 月選択<select>の選択肢をMONTHLY_LABELSから作り直す。currentLabelがまだ候補にあれば維持し、
+  // 無ければ最新（先頭）を選ぶ。選ばれた値を返す
+  function populateMonthlyLabelSelect_(selectId, currentLabel){
+    var sel = document.getElementById(selectId);
+    sel.innerHTML = MONTHLY_LABELS.map(function(l){ return '<option value="' + l + '">' + l + '</option>'; }).join('');
+    sel.value = MONTHLY_LABELS.indexOf(currentLabel) !== -1 ? currentLabel : (MONTHLY_LABELS[0] || '');
+    return sel.value;
+  }
+
+  // ── 月次集計（閲覧専用。給与じまん入力用の固定31列シートをそのまま表示） ──
+  var GESSHU_HEADERS = [], GESSHU_ROWS = [], GESSHU_COLUMN_COLORS = [];
+  var gState = { label:'', name:'' };
+
+  function gMatches(r){ return !gState.name || r.values[0] === gState.name; }
+
+  function populateGesshuNameDropdown(){
+    var nameSel = document.getElementById('fg-name');
+    var names = Array.from(new Set(GESSHU_ROWS.map(function(r){ return r.values[0]; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(gState.name) !== -1 ? gState.name : '';
+    gState.name = nameSel.value;
+  }
+
+  function renderGesshuTable(){
+    document.getElementById('gesshu-thead').innerHTML =
+      '<tr>' + GESSHU_HEADERS.map(function(h, i){
+        return '<th' + (i === 0 ? ' class="stickyname-head"' : '') + '>' + escapeHtml(h).replace(/\n/g, '<br>') + '</th>';
+      }).join('') + '</tr>';
+    var tbody = document.getElementById('gesshu-tbody');
+    var filtered = GESSHU_ROWS.filter(gMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.innerHTML = r.values.map(function(v, i){
+        var text = (v === null || v === undefined) ? '' : String(v);
+        // 基本情報/勤/怠/管理用の列グループを、シート本体と同じ色でひと目で分かるようにする
+        var bg = GESSHU_COLUMN_COLORS[i] ? ' style="background:' + GESSHU_COLUMN_COLORS[i] + ';"' : '';
+        var cls = i === 0 ? 'name stickyname' : 'mono';
+        return '<td class="' + cls + '"' + bg + '>' + escapeHtml(text) + '</td>';
+      }).join('');
+      tbody.appendChild(tr);
+    });
+    document.getElementById('gesshu-emptystate').hidden = filtered.length > 0;
+    document.getElementById('gesshu-resultcount').textContent = filtered.length + ' 名（全' + GESSHU_ROWS.length + '名中）';
+  }
+
+  document.getElementById('fg-name').addEventListener('change', function(e){ gState.name = e.target.value; renderGesshuTable(); });
+  document.getElementById('fg-label').addEventListener('change', function(e){ gState.label = e.target.value; loadGesshuList(); });
+  document.getElementById('gesshu-refresh').addEventListener('click', function(){ loadGesshuList(); });
+
+  function loadGesshuList(){
+    document.getElementById('gesshu-resultcount').textContent = '読み込み中…';
+    ensureMonthlyLabelsLoaded_(function(){
+      gState.label = populateMonthlyLabelSelect_('fg-label', gState.label);
+      if (!gState.label) { document.getElementById('gesshu-resultcount').textContent = '利用可能な月がありません。'; return; }
+      fetch(portalApiUrl_('portalGesshuList', { label: gState.label }))
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+          if (!data.success) { showToast(data.error || '月次集計の取得に失敗しました。', true); return; }
+          GESSHU_HEADERS = data.headers || [];
+          GESSHU_ROWS = data.rows || [];
+          GESSHU_COLUMN_COLORS = data.columnColors || [];
+          populateGesshuNameDropdown();
+          renderGesshuTable();
+        })
+        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+    });
+  }
+
+  // ── 週別実働（閲覧専用。週数が月によって変動するため週ラベル・列見出しもサーバーから受け取る） ──
+  var SHUUBETSU_WEEKS = [], SHUUBETSU_ROWS = [], SHUUBETSU_SUBCOL_COLORS = [];
+  var wState = { label:'', name:'' };
+
+  function wMatches(r){ return !wState.name || r.name === wState.name; }
+
+  function populateShuubetsuNameDropdown(){
+    var nameSel = document.getElementById('fw-name');
+    var names = Array.from(new Set(SHUUBETSU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">すべて</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(wState.name) !== -1 ? wState.name : '';
+    wState.name = nameSel.value;
+  }
+
+  function renderShuubetsuTable(){
+    var thead = document.getElementById('shuubetsu-thead');
+    thead.innerHTML =
+      '<tr><th rowspan="2" class="stickyname-head">氏名</th><th rowspan="2">雇用区分</th>' +
+        SHUUBETSU_WEEKS.map(function(w){ return '<th colspan="4">' + escapeHtml(w.label) + '</th>'; }).join('') +
+      '</tr>' +
+      '<tr>' + SHUUBETSU_WEEKS.map(function(w){
+        return w.sub.map(function(s){ return '<th>' + escapeHtml(s).replace(/\n/g, '<br>') + '</th>'; }).join('');
+      }).join('') + '</tr>';
+    // 2段ヘッダーなので、1段目の実際の高さ分だけ2段目のsticky位置をずらす
+    if (thead.rows.length === 2) {
+      var row1Height = thead.rows[0].offsetHeight;
+      Array.from(thead.rows[1].cells).forEach(function(th){ th.style.top = row1Height + 'px'; });
+    }
+
+    var tbody = document.getElementById('shuubetsu-tbody');
+    var filtered = SHUUBETSU_ROWS.filter(wMatches);
+    tbody.innerHTML = '';
+    filtered.forEach(function(r){
+      var tr = document.createElement('tr');
+      var cells = '<td class="name stickyname">' + escapeHtml(r.name) + '</td><td>' + kbnBadge_(r.koyouKbn) + '</td>';
+      r.weeks.forEach(function(week){
+        cells += week.map(function(v, si){
+          var bg = SHUUBETSU_SUBCOL_COLORS[si] ? ' style="background:' + SHUUBETSU_SUBCOL_COLORS[si] + ';"' : '';
+          return '<td class="mono"' + bg + '>' + escapeHtml(v || '—') + '</td>';
+        }).join('');
+      });
+      tr.innerHTML = cells;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('shuubetsu-emptystate').hidden = filtered.length > 0;
+    document.getElementById('shuubetsu-resultcount').textContent = filtered.length + ' 名（全' + SHUUBETSU_ROWS.length + '名中）';
+  }
+
+  document.getElementById('fw-name').addEventListener('change', function(e){ wState.name = e.target.value; renderShuubetsuTable(); });
+  document.getElementById('fw-label').addEventListener('change', function(e){ wState.label = e.target.value; loadShuubetsuList(); });
+  document.getElementById('shuubetsu-refresh').addEventListener('click', function(){ loadShuubetsuList(); });
+
+  function loadShuubetsuList(){
+    document.getElementById('shuubetsu-resultcount').textContent = '読み込み中…';
+    ensureMonthlyLabelsLoaded_(function(){
+      wState.label = populateMonthlyLabelSelect_('fw-label', wState.label);
+      if (!wState.label) { document.getElementById('shuubetsu-resultcount').textContent = '利用可能な月がありません。'; return; }
+      fetch(portalApiUrl_('portalShuubetsuList', { label: wState.label }))
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+          if (!data.success) { showToast(data.error || '週別実働の取得に失敗しました。', true); return; }
+          SHUUBETSU_WEEKS = data.weeks || [];
+          SHUUBETSU_ROWS = data.rows || [];
+          SHUUBETSU_SUBCOL_COLORS = data.subColColors || [];
+          populateShuubetsuNameDropdown();
+          renderShuubetsuTable();
+        })
+        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+    });
+  }
+
+  // ── 打刻確認（閲覧専用。日付×社員のワイド行列をシートに近い形で再現。
+  //    警告色（残業★・申請なし系等）はGAS側が実際の背景色・文字色をそのまま返す） ──
+  var DAKOKU_KAKUNIN_DATA = { employeeNames: [], days: [] };
+  var kState = { label:'', name:'' };
+
+  // zebraBgを渡した時、警告色が付いていない素のセル（#ffffff）だけゼブラ地色に差し替える。
+  // 警告色（残業★・申請なし系等）が付いているセルはそのまま優先して見せる
+  function dkStyle_(bg, fc, zebraBg){
+    var base = (bg === '#ffffff' && zebraBg) ? zebraBg : bg;
+    var s = 'background:' + (base || '#ffffff') + ';';
+    if (fc) s += 'color:' + fc + ';';
+    return s;
+  }
+
+  function populateDakokuKakuninNameDropdown(){
+    var nameSel = document.getElementById('fk-name');
+    var names = (DAKOKU_KAKUNIN_DATA.employeeNames || []).slice().sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    nameSel.innerHTML = '<option value="">全員表示</option>' +
+      names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+    nameSel.value = names.indexOf(kState.name) !== -1 ? kState.name : '';
+    kState.name = nameSel.value;
+  }
+
+  function renderDakokuKakuninTable(){
+    var data = DAKOKU_KAKUNIN_DATA;
+    var allNames = data.employeeNames || [];
+    var pickedIdx = kState.name ? allNames.indexOf(kState.name) : -1;
+    var empIdxs = pickedIdx !== -1 ? [pickedIdx] : allNames.map(function(_, i){ return i; });
+
+    // マス目の幅を社員ごとに揃えるため、列幅を固定したcolgroupを組み立てる（table-layout:fixed
+    // と組み合わせることで、備考の文字数で社員ごとに列幅がバラバラになるのを防ぐ。
+    // ユーザー指摘：「マス目が不揃いで見た目が悪い」）
+    document.getElementById('dakokukakunin-colgroup').innerHTML =
+      '<col style="width:64px;"><col style="width:62px;">' +
+      empIdxs.map(function(){ return '<col style="width:68px;"><col style="width:68px;"><col style="width:180px;">'; }).join('');
+
+    var thead = document.getElementById('dakokukakunin-thead');
+    thead.innerHTML =
+      '<tr><th colspan="2" rowspan="2" class="dk-corner">日付</th>' +
+        empIdxs.map(function(i){ return '<th colspan="3" class="emp-end">' + escapeHtml(allNames[i] || '—') + '</th>'; }).join('') +
+      '</tr><tr>' +
+        empIdxs.map(function(){ return '<th>出勤</th><th>退勤</th><th class="emp-end">備考</th>'; }).join('') +
+      '</tr>';
+    if (thead.rows.length === 2) {
+      var h = thead.rows[0].offsetHeight;
+      Array.from(thead.rows[1].cells).forEach(function(th){ th.style.top = h + 'px'; });
+    }
+
+    var tbody = document.getElementById('dakokukakunin-tbody');
+    tbody.innerHTML = '';
+    (data.days || []).forEach(function(day){
+      var tr = document.createElement('tr');
+      var dateStyle = dkStyle_(day.dateBg, day.dateFc);
+      var cells =
+        '<td class="mono dk-col0" style="' + dateStyle + '">' + escapeHtml(day.date) + '</td>' +
+        '<td class="mono dk-col1" style="' + dateStyle + '">' + escapeHtml(day.dow) + '</td>';
+      empIdxs.forEach(function(i, pos){
+        var emp = day.employees[i] || {};
+        // 社員ブロックを1人おきに薄く塗って、どこで一人分が終わるか目で追いやすくする
+        // （警告色が付いているセルはdkStyle_側でそのまま優先される）
+        var zebraBg = (pos % 2 === 0) ? '#F0EEE2' : null;
+        cells +=
+          '<td class="mono" style="' + dkStyle_(emp.shukkinBg, emp.shukkinFc, zebraBg) + '">' + escapeHtml(emp.shukkin || '—') + '</td>' +
+          '<td class="mono" style="' + dkStyle_(emp.taikinBg, emp.taikinFc, zebraBg) + '">' + escapeHtml(emp.taikin || '—') + '</td>' +
+          '<td class="emp-end" style="' + dkStyle_(emp.bikoBg, emp.bikoFc, zebraBg) + '">' + escapeHtml(emp.biko || '') + '</td>';
+      });
+      tr.innerHTML = cells;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('dakokukakunin-emptystate').hidden = (data.days || []).length > 0;
+    document.getElementById('dakokukakunin-resultcount').textContent =
+      (data.days || []).length + ' 日分（' + (pickedIdx !== -1 ? '1名表示中' : '全' + allNames.length + '名') + '）';
+
+    // 日付・曜日列（A・B列相当）を横スクロールでも追従するよう固定する
+    // （実際のシートもsetFrozenColumns(2)で固定している。2026-10-17ユーザー要望）
+    var firstTr = tbody.rows[0];
+    if (firstTr) {
+      var col0Width = firstTr.cells[0].offsetWidth;
+      Array.from(tbody.rows).forEach(function(r){
+        r.cells[0].style.left = '0px';
+        r.cells[1].style.left = col0Width + 'px';
+      });
+      var cornerTh = thead.rows[0].cells[0];
+      cornerTh.style.left = '0px';
+    }
+  }
+
+  document.getElementById('fk-name').addEventListener('change', function(e){ kState.name = e.target.value; renderDakokuKakuninTable(); });
+  document.getElementById('fk-label').addEventListener('change', function(e){ kState.label = e.target.value; loadDakokuKakuninList(); });
+  document.getElementById('dakokukakunin-refresh').addEventListener('click', function(){ loadDakokuKakuninList(); });
+
+  function loadDakokuKakuninList(){
+    document.getElementById('dakokukakunin-resultcount').textContent = '読み込み中…';
+    ensureMonthlyLabelsLoaded_(function(){
+      kState.label = populateMonthlyLabelSelect_('fk-label', kState.label);
+      if (!kState.label) { document.getElementById('dakokukakunin-resultcount').textContent = '利用可能な月がありません。'; return; }
+      fetch(portalApiUrl_('portalDakokuKakuninList', { label: kState.label }))
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+          if (!data.success) { showToast(data.error || '打刻確認の取得に失敗しました。', true); return; }
+          DAKOKU_KAKUNIN_DATA = data;
+          populateDakokuKakuninNameDropdown();
+          renderDakokuKakuninTable();
+        })
+        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+    });
+  }
+
+  // ── ホーム（ダッシュボード。2026-10-18 全面リデザイン） ──
+  // 元のホームシート（スタンプ横並び＋承認待ち/申請なしの個別カード）の構成には縛られず、
+  // 「判定印（要対応件数）＋内訳バー＋5カテゴリ統合の一覧」として作り直した
+  // （ユーザー要望：「ホーム画面を元のスプレットシートに囚われなくていいから、全く新しく
+  // 使いやすく見やすくおしゃれに作成しなおしたい」）。
+  var homeData = null;
+  var homeActiveCategory = null; // null=すべて／'approve'|'missing'|'mistake'|'yukyu'|'zangyo'
+
+  // bulk：内訳でそのカテゴリを選んだ時に「まとめて確認する」で遷移できる先（氏名で絞らず
+  // 状況のみで絞り込む）。承認/否認ボタンを持つタブ（申請一覧・修正依頼）だけに用意する。
+  // 申請なし・有給残少・残業注意は遷移先タブ側に対応する絞り込みが無いため、内訳バー選択時は
+  // この一覧自体の絞り込みのみ行う
+  var HOME_CATS = {
+    approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' } } },
+    missing: { label:'申請なし', bulk:null },
+    mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' } } },
+    yukyu  : { label:'有給残少', bulk:null },
+    zangyo : { label:'残業注意', bulk:null },
+  };
+  var HOME_CAT_KEYS = Object.keys(HOME_CATS);
+
+  function elapsedLabel_(appDateTimeStr){
+    if (!appDateTimeStr) return '';
+    var d = new Date(String(appDateTimeStr).replace(/-/g, '/'));
+    if (isNaN(d.getTime())) return '';
+    var diffMin = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+    if (diffMin < 60) return diffMin <= 1 ? 'たった今' : diffMin + '分経過';
+    var diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return diffHour + '時間経過';
+    return Math.floor(diffHour / 24) + '日経過';
+  }
+
+  function daysAgoLabel_(dateStr){
+    var d = new Date(String(dateStr).replace(/-/g, '/'));
+    if (isNaN(d.getTime())) return '';
+    var diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+    return diffDays <= 0 ? '本日' : diffDays + '日前';
+  }
+
+  // 5カテゴリ（承認待ち・申請なし・打刻ミス・有給残少・残業注意）を1本の統合リストにまとめる。
+  // 各項目はクリックで該当タブへ移動し、その社員だけに絞り込む（jumpToTab）
+  function buildHomeItems_(data){
+    var items = [];
+    data.pending.current.concat(data.pending.prev).forEach(function(r){
+      items.push({
+        category: 'approve', name: r.name,
+        detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です',
+        meta    : elapsedLabel_(r.appDateTime),
+        jump    : function(){ jumpToTab('shinsei', r.name, { status: '承認待' }); },
+      });
+    });
+    data.nashi.current.concat(data.nashi.prev).forEach(function(r){
+      if (r.resolved === '済') return; // 解消済みは対応不要なので一覧に出さない
+      items.push({
+        category: 'missing', name: r.name,
+        detail  : r.dateStr + 'の' + r.content,
+        meta    : daysAgoLabel_(r.dateStr),
+        jump    : function(){ jumpToTab('dakoku', r.name, { date: r.dateStr.replace(/\//g, '-') }); },
+      });
+    });
+    data.shusei.forEach(function(r){
+      items.push({
+        category: 'mistake', name: r.name,
+        detail  : r.content,
+        meta    : elapsedLabel_(r.appDateTime),
+        jump    : function(){ jumpToTab('shusei', r.name); },
+      });
+    });
+    data.yukyuLow.forEach(function(r){
+      items.push({
+        category: 'yukyu', name: r.name,
+        detail  : '有給休暇の残日数が少なくなっています',
+        meta    : '残 ' + fmtDay_(r.zanzanNissu),
+        jump    : function(){ jumpToTab('yukyu', r.name); },
+      });
+    });
+    data.zangyou.forEach(function(r){
+      items.push({
+        category: 'zangyo', name: r.name,
+        detail  : '今月の残業時間が上限に近づいています（' + r.level + '）',
+        meta    : r.hhmm,
+        jump    : function(){ jumpToTab('shuukei', r.name); },
+      });
+    });
+    return items;
+  }
+
+  function renderHomeAll_(){
+    if (!homeData) return;
+    var items = buildHomeItems_(homeData);
+    var total = items.length;
+
+    var seal = document.getElementById('home-seal');
+    seal.classList.toggle('ok', total === 0);
+    document.getElementById('home-seal-num').textContent = total;
+    document.getElementById('home-seal-label').textContent = total === 0 ? '異常なし' : '件 要対応';
+
+    var counts = {};
+    HOME_CAT_KEYS.forEach(function(k){ counts[k] = items.filter(function(it){ return it.category === k; }).length; });
+    document.getElementById('home-bd-total').textContent = '合計 ' + total + '件';
+
+    var bar = document.getElementById('home-bd-bar');
+    bar.innerHTML = '';
+    HOME_CAT_KEYS.forEach(function(k){
+      if (!counts[k]) return;
+      var seg = document.createElement('div');
+      seg.className = 'bdseg cat-' + k;
+      seg.style.flex = '0 0 ' + (counts[k] / total * 100) + '%';
+      bar.appendChild(seg);
+    });
+
+    var legend = document.getElementById('home-bd-legend');
+    legend.innerHTML = '';
+    HOME_CAT_KEYS.forEach(function(k){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'leg cat-' + k + (homeActiveCategory === k ? ' active' : '');
+      btn.innerHTML = '<span class="dot"></span><span class="lb">' + escapeHtml(HOME_CATS[k].label) + '</span>' +
+        '<span class="ct">' + counts[k] + '</span>';
+      btn.addEventListener('click', function(){
+        homeActiveCategory = (homeActiveCategory === k) ? null : k;
+        renderHomeAll_();
+      });
+      legend.appendChild(btn);
+    });
+
+    var rows = homeActiveCategory ? items.filter(function(it){ return it.category === homeActiveCategory; }) : items;
+    document.getElementById('home-feed-count').textContent = rows.length + '件を表示中';
+
+    var catInfo = homeActiveCategory ? HOME_CATS[homeActiveCategory] : null;
+    document.getElementById('home-feed-actions').hidden = !homeActiveCategory;
+    var bulkBtn = document.getElementById('home-feed-bulk');
+    bulkBtn.hidden = !(catInfo && catInfo.bulk);
+    if (catInfo && catInfo.bulk) {
+      bulkBtn.textContent = catInfo.label + 'を' + rows.length + '件まとめて確認する →';
+    }
+
+    var wrap = document.getElementById('home-feed-rows');
+    wrap.innerHTML = '';
+    rows.forEach(function(it){
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'feedrow';
+      row.innerHTML =
+        '<span class="feedtag cat-' + it.category + '">' + escapeHtml(HOME_CATS[it.category].label) + '</span>' +
+        '<span class="feedname">' + escapeHtml(it.name) + '</span>' +
+        '<span class="feeddetail">' + escapeHtml(it.detail) + '</span>' +
+        '<span class="feedmeta">' + escapeHtml(it.meta || '') + '</span>' +
+        '<span class="feedarrow">→</span>';
+      row.addEventListener('click', it.jump);
+      wrap.appendChild(row);
+    });
+    document.getElementById('home-feed-empty').hidden = rows.length > 0;
+  }
+
+  document.getElementById('home-feed-clear').addEventListener('click', function(){
+    homeActiveCategory = null;
+    renderHomeAll_();
+  });
+  document.getElementById('home-feed-bulk').addEventListener('click', function(){
+    var catInfo = homeActiveCategory ? HOME_CATS[homeActiveCategory] : null;
+    if (!catInfo || !catInfo.bulk) return;
+    jumpToTab(catInfo.bulk.tab, '', catInfo.bulk.opts);
+  });
+
+  function renderHome(data){
+    homeData = data;
+    homeActiveCategory = null;
+    document.getElementById('home-period').textContent = '対象期間：' + data.period.start + ' 〜 ' + data.period.end;
+    document.getElementById('home-sheetlink').href = data.spreadsheetUrl;
+    renderHomeAll_();
+  }
+
+  function loadHomeSummary(){
+    document.getElementById('home-period').textContent = '対象期間：読み込み中…';
+    return fetch(portalApiUrl_('portalHomeSummary'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.error || 'ホーム画面の取得に失敗しました。', true); return; }
+        renderHome(data);
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+  }
+
+  // ── Googleログイン ──
+  window.handleCredentialResponse = function(response){
+    idToken = response.credential;
+    try {
+      var payload = JSON.parse(base64UrlDecode_(idToken.split('.')[1]));
+      myEmail = payload.email;
+      myName  = payload.name || '';
+    } catch (e) {}
+
+    document.getElementById('loadingNote').style.display = 'block';
+    fetch(GAS_URL + '?mode=checkDairiAdmin&token=' + encodeURIComponent(idToken))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        document.getElementById('loadingNote').style.display = 'none';
+        if (!data.success || !data.isDairiAdmin) {
+          document.getElementById('denied').style.display = 'block';
+          return;
+        }
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('app').classList.add('show');
+        document.getElementById('signedInAs').textContent = 'ログイン中：' + myEmail;
+        tabReady.home = loadHomeSummary();
+        loadFiscalYears_();
+      })
+      .catch(function(){
+        document.getElementById('loadingNote').style.display = 'none';
+        showToast('確認に失敗しました。時間をおいて再度お試しください。', true);
+      });
+  };
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
