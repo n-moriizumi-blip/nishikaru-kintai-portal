@@ -271,15 +271,15 @@
   .bdlegend{display:flex; flex-wrap:wrap; gap:6px 18px;}
   .leg{all:unset; cursor:pointer; display:flex; align-items:center; gap:6px; padding:3px 6px; border-radius:3px;}
   .leg.active{background:var(--field);}
-  .leg .dot{width:9px; height:9px; border-radius:2px; flex:0 0 auto;}
+  .leg .dot, .dot{width:9px; height:9px; border-radius:2px; flex:0 0 auto; display:inline-block;}
   .leg .lb{font-size:12px; font-weight:700; color:var(--ink);}
   .leg .ct{font-size:12px; font-weight:700;}
 
-  .bdseg.cat-approve, .leg.cat-approve .dot, .feedtag.cat-approve{background:var(--pending);}
-  .bdseg.cat-missing, .leg.cat-missing .dot, .feedtag.cat-missing{background:var(--denied);}
-  .bdseg.cat-mistake, .leg.cat-mistake .dot, .feedtag.cat-mistake{background:var(--mistake);}
-  .bdseg.cat-yukyu  , .leg.cat-yukyu   .dot, .feedtag.cat-yukyu{background:var(--provisional);}
-  .bdseg.cat-zangyo , .leg.cat-zangyo  .dot, .feedtag.cat-zangyo{background:var(--rail-accent);}
+  .bdseg.cat-approve, .leg.cat-approve .dot, .feedtag.cat-approve, .dot.cat-approve{background:var(--pending);}
+  .bdseg.cat-missing, .leg.cat-missing .dot, .feedtag.cat-missing, .dot.cat-missing{background:var(--denied);}
+  .bdseg.cat-mistake, .leg.cat-mistake .dot, .feedtag.cat-mistake, .dot.cat-mistake{background:var(--mistake);}
+  .bdseg.cat-yukyu  , .leg.cat-yukyu   .dot, .feedtag.cat-yukyu, .dot.cat-yukyu{background:var(--provisional);}
+  .bdseg.cat-zangyo , .leg.cat-zangyo  .dot, .feedtag.cat-zangyo, .dot.cat-zangyo{background:var(--rail-accent);}
   .leg.cat-approve .ct{color:var(--pending);}
   .leg.cat-missing .ct{color:var(--denied);}
   .leg.cat-mistake .ct{color:var(--mistake);}
@@ -306,6 +306,21 @@
     text-overflow:ellipsis; white-space:nowrap;}
   .feedmeta{flex:0 0 auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim);}
   .feedarrow{flex:0 0 auto; color:var(--line); font-size:13px;}
+
+  /* ── 注意リスト（有給残少・残業注意。2026-10-18、対応が必要な一覧とは切り離した。
+     承認・否認のような「処理すれば終わる」ものではなく、状況を把握するための監視情報
+     のため、判定印・内訳バーのカウントには含めない）── */
+  .homewatch{display:flex; flex-wrap:wrap; gap:20px; margin-top:20px;}
+  .watchcard{flex:1 1 320px; min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+  .watchhead{display:flex; align-items:center; gap:8px; padding:13px 16px; font-size:13px; font-weight:700; color:var(--ink);
+    border-bottom:1px solid var(--line);}
+  .watchcount{margin-left:auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim);}
+  .watchrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:12px; width:100%;
+    padding:10px 16px; border-bottom:1px solid var(--field);}
+  .watchrow:last-child{border-bottom:none;}
+  .watchrow:hover{background:var(--bg);}
+  .watchname{flex:0 0 100px; font-size:13px; font-weight:700; color:var(--ink);}
+  .watchdetail{flex:1 1 auto; min-width:0; font-size:12.5px; color:var(--dim);}
 
   .levelbadge{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; color:#fff;}
   .levelbadge.l60{background:var(--denied);}
@@ -451,7 +466,20 @@
         <div class="emptystate" id="home-feed-empty" hidden>該当する項目はありません。</div>
       </div>
 
-      <div class="homefooter">💡 各行をクリックすると、その社員で絞り込んで該当タブを開きます。内訳でカテゴリを選ぶと、氏名で絞らずまとめて確認できます。</div>
+      <div class="homewatch">
+        <div class="watchcard">
+          <div class="watchhead"><span class="dot cat-yukyu"></span>有給残日数が少ない社員<span class="watchcount" id="home-watch-yukyu-count"></span></div>
+          <div id="home-watch-yukyu-rows"></div>
+          <div class="emptystate" id="home-watch-yukyu-empty" hidden>現在、該当者はいません。</div>
+        </div>
+        <div class="watchcard">
+          <div class="watchhead"><span class="dot cat-zangyo"></span>残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
+          <div id="home-watch-zangyo-rows"></div>
+          <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
+        </div>
+      </div>
+
+      <div class="homefooter">💡 各行をクリックすると、その社員で絞り込んで該当タブを開きます。内訳でカテゴリを選ぶと、氏名で絞らずまとめて確認できます。下の注意リストは承認・対応の要否ではなく、状況の把握用です。</div>
     </div>
 
     <div id="page-shinsei" hidden>
@@ -2179,18 +2207,20 @@
   // （ユーザー要望：「ホーム画面を元のスプレットシートに囚われなくていいから、全く新しく
   // 使いやすく見やすくおしゃれに作成しなおしたい」）。
   var homeData = null;
-  var homeActiveCategory = null; // null=すべて／'approve'|'missing'|'mistake'|'yukyu'|'zangyo'
+  var homeActiveCategory = null; // null=すべて／'approve'|'missing'|'mistake'
 
+  // 2026-10-18修正：有給残少・残業注意は「処理すれば終わる」承認待ち・申請なし・打刻ミスとは
+  // 性質が違う（承認/否認のような決着が無い、状況を見ておくだけの監視情報）という指摘から、
+  // 判定印・内訳バー・「対応が必要な一覧」の対象を3カテゴリに絞り、有給残少・残業注意は
+  // 別枠の「注意リスト」（homewatch、件数に加算しない）に分離した
   // bulk：内訳でそのカテゴリを選んだ時に「まとめて確認する」で遷移できる先（氏名で絞らず
   // 状況のみで絞り込む）。承認/否認ボタンを持つタブ（申請一覧・修正依頼）だけに用意する。
-  // 申請なし・有給残少・残業注意は遷移先タブ側に対応する絞り込みが無いため、内訳バー選択時は
-  // この一覧自体の絞り込みのみ行う
+  // 申請なしは遷移先タブ側に対応する絞り込みが無いため、内訳バー選択時はこの一覧自体の
+  // 絞り込みのみ行う
   var HOME_CATS = {
     approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' } } },
     missing: { label:'申請なし', bulk:null },
     mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' } } },
-    yukyu  : { label:'有給残少', bulk:null },
-    zangyo : { label:'残業注意', bulk:null },
   };
   var HOME_CAT_KEYS = Object.keys(HOME_CATS);
 
@@ -2212,7 +2242,7 @@
     return diffDays <= 0 ? '本日' : diffDays + '日前';
   }
 
-  // 5カテゴリ（承認待ち・申請なし・打刻ミス・有給残少・残業注意）を1本の統合リストにまとめる。
+  // 3カテゴリ（承認待ち・申請なし・打刻ミス＝処理すれば終わる作業）を1本の統合リストにまとめる。
   // 各項目はクリックで該当タブへ移動し、その社員だけに絞り込む（jumpToTab）
   function buildHomeItems_(data){
     var items = [];
@@ -2241,23 +2271,41 @@
         jump    : function(){ jumpToTab('shusei', r.name); },
       });
     });
-    data.yukyuLow.forEach(function(r){
-      items.push({
-        category: 'yukyu', name: r.name,
-        detail  : '有給休暇の残日数が少なくなっています',
-        meta    : '残 ' + fmtDay_(r.zanzanNissu),
-        jump    : function(){ jumpToTab('yukyu', r.name); },
-      });
-    });
-    data.zangyou.forEach(function(r){
-      items.push({
-        category: 'zangyo', name: r.name,
-        detail  : '今月の残業時間が上限に近づいています（' + r.level + '）',
-        meta    : r.hhmm,
-        jump    : function(){ jumpToTab('shuukei', r.name); },
-      });
-    });
     return items;
+  }
+
+  // 注意リスト（有給残少・残業注意）。対応が必要な一覧とは別枠、判定印の件数にも含めない
+  function renderHomeWatch_(data){
+    var yukyuRows = data.yukyuLow.map(function(r){
+      return {
+        name: r.name, detail: '残 ' + fmtDay_(r.zanzanNissu),
+        jump: function(){ jumpToTab('yukyu', r.name); },
+      };
+    });
+    var zangyoRows = data.zangyou.map(function(r){
+      return {
+        name: r.name, detail: r.hhmm + '（' + r.level + '）',
+        jump: function(){ jumpToTab('shuukei', r.name); },
+      };
+    });
+
+    [['yukyu', yukyuRows], ['zangyo', zangyoRows]].forEach(function(pair){
+      var key = pair[0], rows = pair[1];
+      document.getElementById('home-watch-' + key + '-count').textContent = rows.length + '件';
+      var wrap = document.getElementById('home-watch-' + key + '-rows');
+      wrap.innerHTML = '';
+      rows.forEach(function(r){
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'watchrow';
+        row.innerHTML =
+          '<span class="watchname">' + escapeHtml(r.name) + '</span>' +
+          '<span class="watchdetail">' + escapeHtml(r.detail) + '</span>';
+        row.addEventListener('click', r.jump);
+        wrap.appendChild(row);
+      });
+      document.getElementById('home-watch-' + key + '-empty').hidden = rows.length > 0;
+    });
   }
 
   function renderHomeAll_(){
@@ -2344,6 +2392,7 @@
     document.getElementById('home-period').textContent = '対象期間：' + data.period.start + ' 〜 ' + data.period.end;
     document.getElementById('home-sheetlink').href = data.spreadsheetUrl;
     renderHomeAll_();
+    renderHomeWatch_(data);
   }
 
   function loadHomeSummary(){
