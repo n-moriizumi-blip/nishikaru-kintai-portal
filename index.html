@@ -2076,11 +2076,8 @@
   var DAKOKU_KAKUNIN_DATA = { employeeNames: [], days: [] };
   var kState = { label:'', name:'' };
 
-  // zebraBgを渡した時、警告色が付いていない素のセル（#ffffff）だけゼブラ地色に差し替える。
-  // 警告色（残業★・申請なし系等）が付いているセルはそのまま優先して見せる
-  function dkStyle_(bg, fc, zebraBg){
-    var base = (bg === '#ffffff' && zebraBg) ? zebraBg : bg;
-    var s = 'background:' + (base || '#ffffff') + ';';
+  function dkStyle_(bg, fc){
+    var s = 'background:' + (bg || '#ffffff') + ';';
     if (fc) s += 'color:' + fc + ';';
     return s;
   }
@@ -2127,15 +2124,12 @@
       var cells =
         '<td class="mono dk-col0" style="' + dateStyle + '">' + escapeHtml(day.date) + '</td>' +
         '<td class="mono dk-col1" style="' + dateStyle + '">' + escapeHtml(day.dow) + '</td>';
-      empIdxs.forEach(function(i, pos){
+      empIdxs.forEach(function(i){
         var emp = day.employees[i] || {};
-        // 社員ブロックを1人おきに薄く塗って、どこで一人分が終わるか目で追いやすくする
-        // （警告色が付いているセルはdkStyle_側でそのまま優先される）
-        var zebraBg = (pos % 2 === 0) ? '#F0EEE2' : null;
         cells +=
-          '<td class="mono" style="' + dkStyle_(emp.shukkinBg, emp.shukkinFc, zebraBg) + '">' + escapeHtml(emp.shukkin || '—') + '</td>' +
-          '<td class="mono" style="' + dkStyle_(emp.taikinBg, emp.taikinFc, zebraBg) + '">' + escapeHtml(emp.taikin || '—') + '</td>' +
-          '<td class="emp-end" style="' + dkStyle_(emp.bikoBg, emp.bikoFc, zebraBg) + '">' + escapeHtml(emp.biko || '') + '</td>';
+          '<td class="mono" style="' + dkStyle_(emp.shukkinBg, emp.shukkinFc) + '">' + escapeHtml(emp.shukkin || '—') + '</td>' +
+          '<td class="mono" style="' + dkStyle_(emp.taikinBg, emp.taikinFc) + '">' + escapeHtml(emp.taikin || '—') + '</td>' +
+          '<td class="emp-end" style="' + dkStyle_(emp.bikoBg, emp.bikoFc) + '">' + escapeHtml(emp.biko || '') + '</td>';
       });
       tr.innerHTML = cells;
       tbody.appendChild(tr);
