@@ -251,6 +251,10 @@
   /* ── ホーム（2026-10-18 全面リデザイン：判定印＋内訳バー＋統合一覧。元のホームシートの
      構成（スタンプ横並び＋別々のカード）には縛られず作り直した。ユーザー要望：
      「全く新しく使いやすく見やすくおしゃれに」） ── */
+  /* ワイド画面だと対応が必要な一覧・注意リストが伸びきって中央・右側に無駄な余白ができる
+     という指摘を受け、ホームタブ全体の幅に上限を設けた（ユーザー指摘：「スペースが
+     大きすぎて見づらい」） */
+  #page-home{max-width:960px;}
   .homehero{display:flex; flex-wrap:wrap; gap:20px; margin-bottom:20px; align-items:stretch;}
   .homeseal{flex:0 0 auto; width:196px; background:var(--panel); border:1px solid var(--line); border-radius:4px;
     padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;}
