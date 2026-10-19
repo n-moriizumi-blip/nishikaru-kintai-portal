@@ -261,8 +261,10 @@
      まず幅の上限だけで対応したが「右側が空いて良くない、全体的にもっとおしゃれに」との
      再指摘。単に幅を絞るのではなく、対応が必要な一覧（主役・広め）と注意リスト
      （脇役・サイドバー）を左右2カラムに組み替えて、余った横幅を意味のある形で使うように
-     変更した */
-  #page-home{max-width:1120px;}
+     変更した。2026-10-19追加：ワイド画面だとその2カラムでもまだ右側に余白が残るとの
+     指摘を受け、サイドバーを2本（有給残少列／有給消化率+残業注意列）に分けた3カラム
+     構成にし、全体の上限幅も広げて余白を使い切るようにした */
+  #page-home{max-width:1480px;}
   .homehero{display:flex; flex-wrap:wrap; gap:20px; margin-bottom:20px; align-items:stretch;}
   .homeseal{flex:0 0 auto; width:196px; background:var(--panel); border:1px solid var(--line); border-radius:4px;
     padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;}
@@ -305,7 +307,7 @@
      max-height:70vhを打ち消して内部スクロール（見づらい縦スライダー）を無くし、
      ページ全体のスクロールに任せる（ユーザー指摘：「スライダーがあると見づらい」） */
   .homebody{display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;}
-  .homefeedcard{flex:1 1 600px; min-width:0; padding:0; overflow:visible; max-height:none;}
+  .homefeedcard{flex:2 1 480px; min-width:0; padding:0; overflow:visible; max-height:none;}
   .homefeedhead{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;
     padding:16px 18px; background:var(--rail);}
   .homefeedhead h2{margin:0; font-family:var(--display); font-weight:900; font-size:15px; color:var(--rail-ink);}
@@ -341,9 +343,8 @@
   /* 2026-10-19変更：有給消化率カードを有給残少の右に、残業注意をその下（全幅）に並べる
      よう指定を受け、縦積みから2列グリッドに変更（サイドバーも2列分の幅を確保するため
      320px→380pxに拡幅） */
-  .homewatch{flex:0 0 380px; display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;}
+  .watchcol{flex:1 1 260px; min-width:0; display:flex; flex-direction:column; gap:20px;}
   .watchcard{background:var(--panel); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
-  .watchcard-wide{grid-column:1 / -1;}
   .watchhead{display:flex; align-items:center; gap:8px; padding:13px 16px; font-size:13px; font-weight:700;}
   .watchhead.cat-yukyu{background:var(--provisional); color:#fff;}
   .watchhead.cat-zangyo{background:var(--rail-accent); color:var(--ink);}
@@ -410,8 +411,7 @@
     .sheet{overflow-x:auto;}
     table{min-width:700px;}
     .homefeedcard{flex-basis:100%;}
-    .homewatch{flex:1 1 100%; grid-template-columns:1fr;}
-    .watchcard-wide{grid-column:auto;}
+    .watchcol{flex:1 1 100%;}
   }
 </style>
 </head>
@@ -504,18 +504,20 @@
           <div class="emptystate" id="home-feed-empty" hidden>該当する項目はありません。</div>
         </div>
 
-        <div class="homewatch">
+        <div class="watchcol">
           <div class="watchcard">
             <div class="watchhead cat-yukyu">有給残日数が少ない社員<span class="watchcount" id="home-watch-yukyu-count"></span></div>
             <div id="home-watch-yukyu-rows"></div>
             <div class="emptystate" id="home-watch-yukyu-empty" hidden>現在、該当者はいません。</div>
           </div>
+        </div>
+        <div class="watchcol">
           <div class="watchcard">
             <div class="watchhead cat-yukyu">有給消化率が低い社員（上位5名）<span class="watchcount" id="home-watch-consumption-count"></span></div>
             <div id="home-watch-consumption-rows"></div>
             <div class="emptystate" id="home-watch-consumption-empty" hidden>データがありません。</div>
           </div>
-          <div class="watchcard watchcard-wide">
+          <div class="watchcard">
             <div class="watchhead cat-zangyo">残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
             <div id="home-watch-zangyo-rows"></div>
             <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
@@ -2072,7 +2074,7 @@
   }
 
   // ── 月次集計（閲覧専用。給与じまん入力用の固定31列シートをそのまま表示） ──
-  var GESSHU_HEADERS = [], GESSHU_ROWS = [], GESSHU_COLUMN_COLORS = [];
+  var GESSHU_HEADERS = [], GESSHU_ROWS = [], GESSHU_COLUMN_COLORS = [], GESSHU_COLUMN_FONT_COLORS = [];
   var gState = { label:'', name:'' };
 
   function gMatches(r){ return !gState.name || r.values[0] === gState.name; }
@@ -2098,8 +2100,12 @@
       var tr = document.createElement('tr');
       tr.innerHTML = r.values.map(function(v, i){
         var text = (v === null || v === undefined) ? '' : String(v);
-        // 基本情報/勤/怠/管理用の列グループを、シート本体と同じ色でひと目で分かるようにする
-        var bg = GESSHU_COLUMN_COLORS[i] ? ' style="background:' + GESSHU_COLUMN_COLORS[i] + ';"' : '';
+        // 基本情報/勤/怠/管理用の列グループを、シート本体と同じ背景色・文字色でひと目で
+        // 分かるようにする（2026-10-19追加：背景だけでなく文字色もシートに合わせた）
+        var styleParts = [];
+        if (GESSHU_COLUMN_COLORS[i]) styleParts.push('background:' + GESSHU_COLUMN_COLORS[i]);
+        if (GESSHU_COLUMN_FONT_COLORS[i]) styleParts.push('color:' + GESSHU_COLUMN_FONT_COLORS[i]);
+        var bg = styleParts.length ? ' style="' + styleParts.join(';') + ';"' : '';
         var cls = i === 0 ? 'name stickyname' : 'mono';
         return '<td class="' + cls + '"' + bg + '>' + escapeHtml(text) + '</td>';
       }).join('');
@@ -2125,6 +2131,7 @@
           GESSHU_HEADERS = data.headers || [];
           GESSHU_ROWS = data.rows || [];
           GESSHU_COLUMN_COLORS = data.columnColors || [];
+          GESSHU_COLUMN_FONT_COLORS = data.columnFontColors || [];
           populateGesshuNameDropdown();
           renderGesshuTable();
         })
@@ -2133,7 +2140,7 @@
   }
 
   // ── 週別実働（閲覧専用。週数が月によって変動するため週ラベル・列見出しもサーバーから受け取る） ──
-  var SHUUBETSU_WEEKS = [], SHUUBETSU_ROWS = [], SHUUBETSU_SUBCOL_COLORS = [];
+  var SHUUBETSU_WEEKS = [], SHUUBETSU_ROWS = [], SHUUBETSU_SUBCOL_COLORS = [], SHUUBETSU_SUBCOL_FONT_COLORS = [];
   var wState = { label:'', name:'' };
 
   function wMatches(r){ return !wState.name || r.name === wState.name; }
@@ -2170,7 +2177,10 @@
       var cells = '<td class="name stickyname">' + escapeHtml(r.name) + '</td><td>' + kbnBadge_(r.koyouKbn) + '</td>';
       r.weeks.forEach(function(week){
         cells += week.map(function(v, si){
-          var bg = SHUUBETSU_SUBCOL_COLORS[si] ? ' style="background:' + SHUUBETSU_SUBCOL_COLORS[si] + ';"' : '';
+          var styleParts = [];
+          if (SHUUBETSU_SUBCOL_COLORS[si]) styleParts.push('background:' + SHUUBETSU_SUBCOL_COLORS[si]);
+          if (SHUUBETSU_SUBCOL_FONT_COLORS[si]) styleParts.push('color:' + SHUUBETSU_SUBCOL_FONT_COLORS[si]);
+          var bg = styleParts.length ? ' style="' + styleParts.join(';') + ';"' : '';
           return '<td class="mono"' + bg + '>' + escapeHtml(v || '—') + '</td>';
         }).join('');
       });
@@ -2197,6 +2207,7 @@
           SHUUBETSU_WEEKS = data.weeks || [];
           SHUUBETSU_ROWS = data.rows || [];
           SHUUBETSU_SUBCOL_COLORS = data.subColColors || [];
+          SHUUBETSU_SUBCOL_FONT_COLORS = data.subColFontColors || [];
           populateShuubetsuNameDropdown();
           renderShuubetsuTable();
         })
