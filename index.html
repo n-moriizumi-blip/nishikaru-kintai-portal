@@ -503,6 +503,11 @@
             <div id="home-watch-zangyo-rows"></div>
             <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
           </div>
+          <div class="watchcard">
+            <div class="watchhead cat-yukyu">有給消化率が低い社員（上位5名）<span class="watchcount" id="home-watch-consumption-count"></span></div>
+            <div id="home-watch-consumption-rows"></div>
+            <div class="emptystate" id="home-watch-consumption-empty" hidden>データがありません。</div>
+          </div>
         </div>
       </div>
 
@@ -2385,8 +2390,16 @@
         jump: function(){ jumpToTab('shuukei', r.name); },
       };
     });
+    // 2026-10-19追加：ホーム画面右サイドバーの空きスペース活用（ユーザー要望）。
+    // 有給消化率（消化済み日数／今年度付与日数）が低い順のTOP5
+    var consumptionRows = (data.yukyuConsumptionLow || []).map(function(r){
+      return {
+        name: r.name, detail: Math.round(r.rate * 100) + '%（' + fmtDay_(r.shoka) + '／' + fmtDay_(r.fuyo) + '）',
+        jump: function(){ jumpToTab('yukyu', r.name); },
+      };
+    });
 
-    [['yukyu', yukyuRows], ['zangyo', zangyoRows]].forEach(function(pair){
+    [['yukyu', yukyuRows], ['zangyo', zangyoRows], ['consumption', consumptionRows]].forEach(function(pair){
       var key = pair[0], rows = pair[1];
       document.getElementById('home-watch-' + key + '-count').textContent = rows.length + '件';
       var wrap = document.getElementById('home-watch-' + key + '-rows');
