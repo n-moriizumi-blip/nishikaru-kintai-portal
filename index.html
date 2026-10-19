@@ -305,8 +305,9 @@
   .homefeedhead h2{margin:0; font-family:var(--display); font-weight:900; font-size:15px; color:var(--rail-ink);}
   .feedcount{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--rail); background:var(--rail-ink);
     border-radius:999px; padding:4px 12px;}
-  .homefeedactions{display:flex; align-items:center; gap:12px;}
+  .homefeedactions{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
   .linklike{all:unset; cursor:pointer; font-size:12px; font-weight:700; color:var(--rail-dim);}
+  .bulkbtns{display:flex; gap:8px; flex-wrap:wrap;}
   .bulkbtn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700;
     padding:8px 14px; border-radius:3px; background:var(--rail-accent); color:var(--ink);}
 
@@ -477,7 +478,7 @@
             </div>
             <div class="homefeedactions" id="home-feed-actions" hidden>
               <button type="button" class="linklike" id="home-feed-clear">絞り込みを解除</button>
-              <button type="button" class="bulkbtn" id="home-feed-bulk" hidden></button>
+              <div class="bulkbtns" id="home-feed-bulk"></div>
             </div>
           </div>
           <div id="home-feed-rows"></div>
@@ -2287,22 +2288,31 @@
   // （ユーザー要望：「ホーム画面を元のスプレットシートに囚われなくていいから、全く新しく
   // 使いやすく見やすくおしゃれに作成しなおしたい」）。
   var homeData = null;
-  var homeActiveCategory = null; // null=すべて／'approve'|'missing'|'mistake'
+  var homeActiveCategory = null; // null=すべて／HOME_GROUP_KEYSのいずれか（'approve'|'missing'）
 
   // 2026-10-18修正：有給残少・残業注意は「処理すれば終わる」承認待ち・申請なし・打刻ミスとは
   // 性質が違う（承認/否認のような決着が無い、状況を見ておくだけの監視情報）という指摘から、
   // 判定印・内訳バー・「対応が必要な一覧」の対象を3カテゴリに絞り、有給残少・残業注意は
   // 別枠の「注意リスト」（homewatch、件数に加算しない）に分離した
-  // bulk：内訳でそのカテゴリを選んだ時に「まとめて確認する」で遷移できる先（氏名で絞らず
-  // 状況のみで絞り込む）。承認/否認ボタンを持つタブ（申請一覧・修正依頼）だけに用意する。
-  // 申請なしは遷移先タブ側に対応する絞り込みが無いため、内訳バー選択時はこの一覧自体の
-  // 絞り込みのみ行う
+  // HOME_CATS：各行のタグ（色・文字）用の元カテゴリ。bulkは「まとめて確認する」の
+  // 遷移先（氏名で絞らず状況のみで絞り込む）。承認/否認ボタンを持つタブ（申請一覧・
+  // 修正依頼）だけに持つ
   var HOME_CATS = {
-    approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' } } },
+    approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' }, bulkLabel:'申請一覧' } },
     missing: { label:'申請なし', bulk:null },
-    mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' } } },
+    mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' }, bulkLabel:'修正依頼' } },
   };
-  var HOME_CAT_KEYS = Object.keys(HOME_CATS);
+  // 2026-10-19追加：ユーザー指摘「修正依頼（打刻ミス）は、申請が出ている以上は承認待ちの
+  // 扱いの方が自然」を受け、集計・絞り込みは「承認待ち」（申請一覧＋修正依頼の合算）と
+  // 「申請なし」の2グループ単位で行う。ただし行ごとのタグは上のHOME_CATSのまま個別に出す
+  // （合算しても申請一覧由来か修正依頼由来か見分けられるように）。「まとめて確認する」は
+  // グループ内の各カテゴリ分だけボタンを並べる（申請一覧・修正依頼は別タブのため、
+  // 1クリックで両方を同時に開くことはできない）
+  var HOME_GROUPS = {
+    approve: { label:'承認待ち', members:['approve', 'mistake'] },
+    missing: { label:'申請なし', members:['missing'] },
+  };
+  var HOME_GROUP_KEYS = Object.keys(HOME_GROUPS);
 
   function elapsedLabel_(appDateTimeStr){
     if (!appDateTimeStr) return '';
@@ -2399,43 +2409,57 @@
     document.getElementById('home-seal-label').textContent = total === 0 ? '異常なし' : '件 要対応';
 
     var counts = {};
-    HOME_CAT_KEYS.forEach(function(k){ counts[k] = items.filter(function(it){ return it.category === k; }).length; });
+    HOME_GROUP_KEYS.forEach(function(g){
+      var members = HOME_GROUPS[g].members;
+      counts[g] = items.filter(function(it){ return members.indexOf(it.category) !== -1; }).length;
+    });
     document.getElementById('home-bd-total').textContent = '合計 ' + total + '件';
 
     var bar = document.getElementById('home-bd-bar');
     bar.innerHTML = '';
-    HOME_CAT_KEYS.forEach(function(k){
-      if (!counts[k]) return;
+    HOME_GROUP_KEYS.forEach(function(g){
+      if (!counts[g]) return;
       var seg = document.createElement('div');
-      seg.className = 'bdseg cat-' + k;
-      seg.style.flex = '0 0 ' + (counts[k] / total * 100) + '%';
+      seg.className = 'bdseg cat-' + g;
+      seg.style.flex = '0 0 ' + (counts[g] / total * 100) + '%';
       bar.appendChild(seg);
     });
 
     var legend = document.getElementById('home-bd-legend');
     legend.innerHTML = '';
-    HOME_CAT_KEYS.forEach(function(k){
+    HOME_GROUP_KEYS.forEach(function(g){
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'leg cat-' + k + (homeActiveCategory === k ? ' active' : '');
-      btn.innerHTML = '<span class="dot"></span><span class="lb">' + escapeHtml(HOME_CATS[k].label) + '</span>' +
-        '<span class="ct">' + counts[k] + '</span>';
+      btn.className = 'leg cat-' + g + (homeActiveCategory === g ? ' active' : '');
+      btn.innerHTML = '<span class="dot"></span><span class="lb">' + escapeHtml(HOME_GROUPS[g].label) + '</span>' +
+        '<span class="ct">' + counts[g] + '</span>';
       btn.addEventListener('click', function(){
-        homeActiveCategory = (homeActiveCategory === k) ? null : k;
+        homeActiveCategory = (homeActiveCategory === g) ? null : g;
         renderHomeAll_();
       });
       legend.appendChild(btn);
     });
 
-    var rows = homeActiveCategory ? items.filter(function(it){ return it.category === homeActiveCategory; }) : items;
+    var activeMembers = homeActiveCategory ? HOME_GROUPS[homeActiveCategory].members : null;
+    var rows = activeMembers ? items.filter(function(it){ return activeMembers.indexOf(it.category) !== -1; }) : items;
     document.getElementById('home-feed-count').textContent = rows.length + '件を表示中';
 
-    var catInfo = homeActiveCategory ? HOME_CATS[homeActiveCategory] : null;
     document.getElementById('home-feed-actions').hidden = !homeActiveCategory;
-    var bulkBtn = document.getElementById('home-feed-bulk');
-    bulkBtn.hidden = !(catInfo && catInfo.bulk);
-    if (catInfo && catInfo.bulk) {
-      bulkBtn.textContent = catInfo.label + 'を' + rows.length + '件まとめて確認する →';
+    var bulkWrap = document.getElementById('home-feed-bulk');
+    bulkWrap.innerHTML = '';
+    if (activeMembers) {
+      activeMembers.forEach(function(memberKey){
+        var catInfo = HOME_CATS[memberKey];
+        if (!catInfo || !catInfo.bulk) return;
+        var cnt = rows.filter(function(it){ return it.category === memberKey; }).length;
+        if (!cnt) return;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bulkbtn';
+        btn.textContent = catInfo.bulk.bulkLabel + 'で' + cnt + '件まとめて確認する →';
+        btn.addEventListener('click', function(){ jumpToTab(catInfo.bulk.tab, '', catInfo.bulk.opts); });
+        bulkWrap.appendChild(btn);
+      });
     }
 
     var wrap = document.getElementById('home-feed-rows');
@@ -2459,11 +2483,6 @@
   document.getElementById('home-feed-clear').addEventListener('click', function(){
     homeActiveCategory = null;
     renderHomeAll_();
-  });
-  document.getElementById('home-feed-bulk').addEventListener('click', function(){
-    var catInfo = homeActiveCategory ? HOME_CATS[homeActiveCategory] : null;
-    if (!catInfo || !catInfo.bulk) return;
-    jumpToTab(catInfo.bulk.tab, '', catInfo.bulk.opts);
   });
 
   function renderHome(data){
