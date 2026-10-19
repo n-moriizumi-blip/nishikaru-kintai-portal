@@ -251,10 +251,12 @@
   /* ── ホーム（2026-10-18 全面リデザイン：判定印＋内訳バー＋統合一覧。元のホームシートの
      構成（スタンプ横並び＋別々のカード）には縛られず作り直した。ユーザー要望：
      「全く新しく使いやすく見やすくおしゃれに」） ── */
-  /* ワイド画面だと対応が必要な一覧・注意リストが伸びきって中央・右側に無駄な余白ができる
-     という指摘を受け、ホームタブ全体の幅に上限を設けた（ユーザー指摘：「スペースが
-     大きすぎて見づらい」） */
-  #page-home{max-width:960px;}
+  /* ワイド画面だと各カードが伸びきって中央・右側に無駄な余白ができるという指摘を受け、
+     まず幅の上限だけで対応したが「右側が空いて良くない、全体的にもっとおしゃれに」との
+     再指摘。単に幅を絞るのではなく、対応が必要な一覧（主役・広め）と注意リスト
+     （脇役・サイドバー）を左右2カラムに組み替えて、余った横幅を意味のある形で使うように
+     変更した */
+  #page-home{max-width:1120px;}
   .homehero{display:flex; flex-wrap:wrap; gap:20px; margin-bottom:20px; align-items:stretch;}
   .homeseal{flex:0 0 auto; width:196px; background:var(--panel); border:1px solid var(--line); border-radius:4px;
     padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;}
@@ -296,7 +298,8 @@
   /* ホームの一覧は他タブの大きな表と違い項目数が少ないため、.sheet由来のoverflow:auto；
      max-height:70vhを打ち消して内部スクロール（見づらい縦スライダー）を無くし、
      ページ全体のスクロールに任せる（ユーザー指摘：「スライダーがあると見づらい」） */
-  .homefeedcard{padding:0; overflow:visible; max-height:none;}
+  .homebody{display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;}
+  .homefeedcard{flex:1 1 600px; min-width:0; padding:0; overflow:visible; max-height:none;}
   .homefeedhead{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;
     padding:16px 18px; background:var(--rail);}
   .homefeedhead h2{margin:0; font-family:var(--display); font-weight:900; font-size:15px; color:var(--rail-ink);}
@@ -321,8 +324,8 @@
   /* ── 注意リスト（有給残少・残業注意。2026-10-18、対応が必要な一覧とは切り離した。
      承認・否認のような「処理すれば終わる」ものではなく、状況を把握するための監視情報
      のため、判定印・内訳バーのカウントには含めない）── */
-  .homewatch{display:flex; flex-wrap:wrap; gap:20px; margin-top:20px;}
-  .watchcard{flex:1 1 320px; min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+  .homewatch{flex:0 0 320px; display:flex; flex-direction:column; gap:20px;}
+  .watchcard{background:var(--panel); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
   .watchhead{display:flex; align-items:center; gap:8px; padding:13px 16px; font-size:13px; font-weight:700;}
   .watchhead.cat-yukyu{background:var(--provisional); color:#fff;}
   .watchhead.cat-zangyo{background:var(--rail-accent); color:var(--ink);}
@@ -388,6 +391,8 @@
     .fiscalyear-select{opacity:1;} /* モバイルはレールが常に全幅で折りたたみが無いため、常に表示する */
     .sheet{overflow-x:auto;}
     table{min-width:700px;}
+    .homefeedcard{flex-basis:100%;}
+    .homewatch{flex:1 1 100%;}
   }
 </style>
 </head>
@@ -463,35 +468,37 @@
         </div>
       </div>
 
-      <div class="sheet homefeedcard">
-        <div class="homefeedhead">
-          <div style="display:flex; align-items:baseline; gap:10px;">
-            <h2>対応が必要な一覧</h2>
-            <span class="feedcount" id="home-feed-count">0件を表示中</span>
+      <div class="homebody">
+        <div class="sheet homefeedcard">
+          <div class="homefeedhead">
+            <div style="display:flex; align-items:baseline; gap:10px;">
+              <h2>対応が必要な一覧</h2>
+              <span class="feedcount" id="home-feed-count">0件を表示中</span>
+            </div>
+            <div class="homefeedactions" id="home-feed-actions" hidden>
+              <button type="button" class="linklike" id="home-feed-clear">絞り込みを解除</button>
+              <button type="button" class="bulkbtn" id="home-feed-bulk" hidden></button>
+            </div>
           </div>
-          <div class="homefeedactions" id="home-feed-actions" hidden>
-            <button type="button" class="linklike" id="home-feed-clear">絞り込みを解除</button>
-            <button type="button" class="bulkbtn" id="home-feed-bulk" hidden></button>
+          <div id="home-feed-rows"></div>
+          <div class="emptystate" id="home-feed-empty" hidden>該当する項目はありません。</div>
+        </div>
+
+        <div class="homewatch">
+          <div class="watchcard">
+            <div class="watchhead cat-yukyu">有給残日数が少ない社員<span class="watchcount" id="home-watch-yukyu-count"></span></div>
+            <div id="home-watch-yukyu-rows"></div>
+            <div class="emptystate" id="home-watch-yukyu-empty" hidden>現在、該当者はいません。</div>
+          </div>
+          <div class="watchcard">
+            <div class="watchhead cat-zangyo">残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
+            <div id="home-watch-zangyo-rows"></div>
+            <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
           </div>
         </div>
-        <div id="home-feed-rows"></div>
-        <div class="emptystate" id="home-feed-empty" hidden>該当する項目はありません。</div>
       </div>
 
-      <div class="homewatch">
-        <div class="watchcard">
-          <div class="watchhead cat-yukyu">有給残日数が少ない社員<span class="watchcount" id="home-watch-yukyu-count"></span></div>
-          <div id="home-watch-yukyu-rows"></div>
-          <div class="emptystate" id="home-watch-yukyu-empty" hidden>現在、該当者はいません。</div>
-        </div>
-        <div class="watchcard">
-          <div class="watchhead cat-zangyo">残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
-          <div id="home-watch-zangyo-rows"></div>
-          <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
-        </div>
-      </div>
-
-      <div class="homefooter">💡 各行をクリックすると、その社員で絞り込んで該当タブを開きます。内訳でカテゴリを選ぶと、氏名で絞らずまとめて確認できます。下の注意リストは承認・対応の要否ではなく、状況の把握用です。</div>
+      <div class="homefooter">💡 各行をクリックすると、その社員で絞り込んで該当タブを開きます。内訳でカテゴリを選ぶと、氏名で絞らずまとめて確認できます。右の注意リストは承認・対応の要否ではなく、状況の把握用です。</div>
     </div>
 
     <div id="page-shinsei" hidden>
