@@ -146,12 +146,14 @@
   td.name{font-weight:700; color:var(--ink);}
   /* 項目の意味的なまとまりを区切る太めの縦線（例：36協定の基本情報/年間累計/当月指標） */
   .zone-end{border-right:2px solid #8a8a8a;}
-  /* 有給管理：通常有給/積立有給の列グループを色分け */
-  td.yukyu-normal{background:#EAF1FB;}
-  td.yukyu-tsumitate{background:#FDF1E3;}
-  /* 36協定：年間累計指標/当月指標の列グループを色分け */
-  td.z36-nenkan{background:#EAF1FB;}
-  td.z36-tsukigetsu{background:#FDF1E3;}
+  /* 有給管理：通常有給/積立有給の列グループを色分け。2026-10-19追加：スプレッドシート側は
+     背景色に文字色も合わせているとの指摘を受け、ポータル独自に追加したこの2色分けにも
+     （シート側に元々の配色は無いため）同系統の濃色文字を合わせた */
+  td.yukyu-normal{background:#EAF1FB; color:#1F4E79;}
+  td.yukyu-tsumitate{background:#FDF1E3; color:#C55A11;}
+  /* 36協定：年間累計指標/当月指標の列グループを色分け（同上の理由で文字色を追加） */
+  td.z36-nenkan{background:#EAF1FB; color:#1F4E79;}
+  td.z36-tsukigetsu{background:#FDF1E3; color:#C55A11;}
   .emptystate{padding:40px 20px; text-align:center; color:var(--dim); font-size:13px;}
 
   /* ── ハンコ風スタンプ ── */
@@ -165,17 +167,21 @@
   .stamp.approved{border-color:var(--approved); color:var(--approved);}
   .stamp.denied{border-color:var(--denied); color:var(--denied);}
   /* ── 申請一覧・修正依頼：行全体も状況の色で薄く塗って、パッと見で分かるようにする
-     （ユーザー指摘：「ステータスが分かりずらい」。.resolvedbadgeと同じ赤/緑の濃さに揃えた） ── */
-  tr.row-pending{border-left:4px solid var(--pending); background:#F5E6C7;}
-  tr.row-provisional{border-left:4px solid var(--provisional); background:#D4E9ED;}
-  tr.row-approved{border-left:4px solid var(--approved); background:#D3ECDE;}
-  tr.row-denied{border-left:4px solid var(--denied); background:#F6D3CF;}
+     （ユーザー指摘：「ステータスが分かりずらい」。.resolvedbadgeと同じ赤/緑の濃さに揃えた）。
+     2026-10-19追加：スプレッドシート側（applyShinseiStatusColor等）は背景色だけでなく
+     文字色も合わせている（同じ濃さに統一したため配色自体はシートと完全一致ではないが、
+     系統は同じ）との指摘を受け、文字色も追加した ── */
+  tr.row-pending{border-left:4px solid var(--pending); background:#F5E6C7; color:#7F6000;}
+  tr.row-provisional{border-left:4px solid var(--provisional); background:#D4E9ED; color:#1F4E79;}
+  tr.row-approved{border-left:4px solid var(--approved); background:#D3ECDE; color:#274E13;}
+  tr.row-denied{border-left:4px solid var(--denied); background:#F6D3CF; color:#7F0000;}
 
-  /* ── 打刻種別の色分け（打刻ログシートの出勤=緑/退勤=青/外出=黄/帰社=紫と同じ濃さ） ── */
-  tr.type-shukkin{border-left:4px solid #274E13; background:#D9EAD3;}
-  tr.type-taikin{border-left:4px solid #1F4E79; background:#D0E4F5;}
-  tr.type-gaishutsu{border-left:4px solid #7F6000; background:#FFF2CC;}
-  tr.type-kisha{border-left:4px solid #4A235A; background:#EAD1DC;}
+  /* ── 打刻種別の色分け（打刻ログシートの出勤=緑/退勤=青/外出=黄/帰社=紫と同じ濃さ、
+     文字色もシートのapplyDakokuLogColorと同じ組み合わせ） ── */
+  tr.type-shukkin{border-left:4px solid #274E13; background:#D9EAD3; color:#274E13;}
+  tr.type-taikin{border-left:4px solid #1F4E79; background:#D0E4F5; color:#1F4E79;}
+  tr.type-gaishutsu{border-left:4px solid #7F6000; background:#FFF2CC; color:#7F6000;}
+  tr.type-kisha{border-left:4px solid #4A235A; background:#EAD1DC; color:#4A235A;}
   tr.type-shukkin td:first-child, tr.type-taikin td:first-child,
   tr.type-gaishutsu td:first-child, tr.type-kisha td:first-child{padding-left:9px;}
 
@@ -221,17 +227,17 @@
   .monthgrid .mbox .ml{font-size:10px; color:var(--dim); font-family:var(--mono);}
   .monthgrid .mbox .mv{font-family:var(--mono); font-size:14px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;}
 
-  /* ── 特別休暇管理（特別休暇管理シートのTOKUBETSU_KANRI_COLORと同じ配色） ── */
-  tr.tk-keiji{border-left:4px solid #880E4F; background:#FCE4EC;}
-  tr.tk-choji{border-left:4px solid #37474F; background:#ECEFF1;}
-  tr.tk-shobyo{border-left:4px solid #E65100; background:#FFF3E0;}
-  tr.tk-tsumitate{border-left:4px solid #01579B; background:#E1F5FE;}
+  /* ── 特別休暇管理（特別休暇管理シートのTOKUBETSU_KANRI_COLORと同じ配色、文字色も揃えた） ── */
+  tr.tk-keiji{border-left:4px solid #880E4F; background:#FCE4EC; color:#880E4F;}
+  tr.tk-choji{border-left:4px solid #37474F; background:#ECEFF1; color:#37474F;}
+  tr.tk-shobyo{border-left:4px solid #E65100; background:#FFF3E0; color:#E65100;}
+  tr.tk-tsumitate{border-left:4px solid #01579B; background:#E1F5FE; color:#01579B;}
   .choukabadge{font-size:11px; font-weight:700; color:var(--denied); background:var(--field);
     border:1px solid var(--denied); border-radius:999px; padding:2px 9px;}
 
-  /* ── 伝言板（applyDengonbanColorと同じ配色。表示＝未確認・済＝確認済み） ── */
-  tr.dg-hyouji{border-left:4px solid #7F6000; background:#FFF2CC;}
-  tr.dg-sumi{border-left:4px solid #274E13; background:#D9EAD3;}
+  /* ── 伝言板（applyDengonbanColorと同じ配色。表示＝未確認・済＝確認済み、文字色も同じ） ── */
+  tr.dg-hyouji{border-left:4px solid #7F6000; background:#FFF2CC; color:#7F6000;}
+  tr.dg-sumi{border-left:4px solid #274E13; background:#D9EAD3; color:#274E13;}
   .dgbadge{font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; font-family:var(--mono);}
   .dgbadge.hyouji{color:#7F6000; background:#fff; border:1px solid #7F6000;}
   .dgbadge.sumi{color:#274E13; background:#fff; border:1px solid #274E13;}
@@ -309,13 +315,14 @@
   .linklike{all:unset; cursor:pointer; font-size:12px; font-weight:700; color:var(--rail-dim);}
   /* 2026-10-19追加：承認待ち（申請一覧・修正依頼）が1件でもあれば、絞り込みをしなくても
      常に目立つ場所にボタンを出してほしいという要望を受け新設。ホームの内訳バーの下・
-     統合一覧の上に置く専用の帯 */
+     統合一覧の上に置く専用の帯。2026-10-19再修正：直下の一覧見出し（紺地）と同じ色では
+     埋もれて目立たないとの指摘を受け、金色地に変更し視線を引くようにした */
   .homeactions{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;}
   .actionbtn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:10px;
-    padding:14px 20px; border-radius:4px; background:var(--rail); color:var(--rail-ink);
-    font-size:13.5px; font-weight:700; box-shadow:0 1px 0 rgba(0,0,0,.08); transition:background .12s;}
-  .actionbtn:hover{background:var(--rail-hover);}
-  .actionbtn .actionbtn-num{font-family:var(--mono); font-size:15px; font-weight:700; color:var(--rail-accent);}
+    padding:14px 20px; border-radius:4px; background:var(--rail-accent); color:var(--ink);
+    font-size:13.5px; font-weight:700; box-shadow:0 1px 0 rgba(0,0,0,.08); transition:filter .12s;}
+  .actionbtn:hover{filter:brightness(0.95);}
+  .actionbtn .actionbtn-num{font-family:var(--mono); font-size:15px; font-weight:700; color:var(--rail);}
 
   .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:14px; width:100%;
     padding:12px 18px; border-bottom:1px solid var(--field);}
@@ -331,8 +338,12 @@
   /* ── 注意リスト（有給残少・残業注意。2026-10-18、対応が必要な一覧とは切り離した。
      承認・否認のような「処理すれば終わる」ものではなく、状況を把握するための監視情報
      のため、判定印・内訳バーのカウントには含めない）── */
-  .homewatch{flex:0 0 320px; display:flex; flex-direction:column; gap:20px;}
+  /* 2026-10-19変更：有給消化率カードを有給残少の右に、残業注意をその下（全幅）に並べる
+     よう指定を受け、縦積みから2列グリッドに変更（サイドバーも2列分の幅を確保するため
+     320px→380pxに拡幅） */
+  .homewatch{flex:0 0 380px; display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;}
   .watchcard{background:var(--panel); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+  .watchcard-wide{grid-column:1 / -1;}
   .watchhead{display:flex; align-items:center; gap:8px; padding:13px 16px; font-size:13px; font-weight:700;}
   .watchhead.cat-yukyu{background:var(--provisional); color:#fff;}
   .watchhead.cat-zangyo{background:var(--rail-accent); color:var(--ink);}
@@ -399,7 +410,8 @@
     .sheet{overflow-x:auto;}
     table{min-width:700px;}
     .homefeedcard{flex-basis:100%;}
-    .homewatch{flex:1 1 100%;}
+    .homewatch{flex:1 1 100%; grid-template-columns:1fr;}
+    .watchcard-wide{grid-column:auto;}
   }
 </style>
 </head>
@@ -499,14 +511,14 @@
             <div class="emptystate" id="home-watch-yukyu-empty" hidden>現在、該当者はいません。</div>
           </div>
           <div class="watchcard">
-            <div class="watchhead cat-zangyo">残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
-            <div id="home-watch-zangyo-rows"></div>
-            <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
-          </div>
-          <div class="watchcard">
             <div class="watchhead cat-yukyu">有給消化率が低い社員（上位5名）<span class="watchcount" id="home-watch-consumption-count"></span></div>
             <div id="home-watch-consumption-rows"></div>
             <div class="emptystate" id="home-watch-consumption-empty" hidden>データがありません。</div>
+          </div>
+          <div class="watchcard watchcard-wide">
+            <div class="watchhead cat-zangyo">残業に注意が必要な社員<span class="watchcount" id="home-watch-zangyo-count"></span></div>
+            <div id="home-watch-zangyo-rows"></div>
+            <div class="emptystate" id="home-watch-zangyo-empty" hidden>現在、該当者はいません。</div>
           </div>
         </div>
       </div>
