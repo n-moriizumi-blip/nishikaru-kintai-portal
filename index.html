@@ -259,7 +259,9 @@
      メニューを都度お願いしていた）。ホーム画面の一番上、見出しのすぐ下に置く */
   .adminops{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:20px;
     padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:4px;}
+  .adminops-divider{width:1px; align-self:stretch; background:var(--line);}
   .adminops-group{display:flex; align-items:center; gap:8px;}
+  .adminops-label{font-size:12px; font-weight:700; color:var(--dim);}
   .adminops-select{background:var(--field); border:1px solid var(--line); border-radius:4px; padding:7px 9px;
     font-size:12.5px; font-family:var(--mono); color:var(--ink);}
   .adminopbtn{all:unset; cursor:pointer; font-size:12.5px; font-weight:700; color:var(--rail);
@@ -495,7 +497,9 @@
 
       <div class="adminops" id="admin-ops">
         <button type="button" class="adminopbtn" id="admin-refresh-btn">📊 当月シートを再計算</button>
+        <div class="adminops-divider"></div>
         <div class="adminops-group">
+          <span class="adminops-label">過去の期間：</span>
           <select id="admin-regen-label" class="adminops-select"></select>
           <button type="button" class="adminopbtn" id="admin-regen-btn">🕐 この期間を再計算</button>
         </div>
