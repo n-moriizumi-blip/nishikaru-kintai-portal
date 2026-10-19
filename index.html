@@ -254,6 +254,19 @@
   /* ── ホーム ── */
   .sheetlink{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--rail);}
 
+  /* 2026-10-19新設：スプレッドシートのメニュー「⚙️ 勤怠管理」にある2つの再計算操作を
+     ポータルからも呼べるようにした（過去の期間の再計算は今までスプレッドシート側の
+     メニューを都度お願いしていた）。ホーム画面の一番上、見出しのすぐ下に置く */
+  .adminops{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:20px;
+    padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:4px;}
+  .adminops-group{display:flex; align-items:center; gap:8px;}
+  .adminops-select{background:var(--field); border:1px solid var(--line); border-radius:4px; padding:7px 9px;
+    font-size:12.5px; font-family:var(--mono); color:var(--ink);}
+  .adminopbtn{all:unset; cursor:pointer; font-size:12.5px; font-weight:700; color:var(--rail);
+    background:var(--field); border:1px solid var(--line); border-radius:4px; padding:8px 14px; white-space:nowrap;}
+  .adminopbtn:hover{border-color:var(--rail); background:#EAF0F4;}
+  .adminopbtn:disabled{opacity:.5; cursor:default;}
+
   /* ── ホーム（2026-10-18 全面リデザイン：判定印＋内訳バー＋統合一覧。元のホームシートの
      構成（スタンプ横並び＋別々のカード）には縛られず作り直した。ユーザー要望：
      「全く新しく使いやすく見やすくおしゃれに」） ── */
@@ -404,7 +417,7 @@
     padding:9px 16px; border-radius:7px; margin-bottom:14px;}
   body.pastyear .pastyearnote{display:block;}
   /* 過去の年度は閲覧専用：承認/否認・差し戻し・新規作成等の操作UIを隠す */
-  body.pastyear .rowbtns, body.pastyear .drawer-actions, body.pastyear #dengon-new{display:none;}
+  body.pastyear .rowbtns, body.pastyear .drawer-actions, body.pastyear #dengon-new, body.pastyear #admin-ops{display:none;}
 
   @media (max-width:720px){
     .app{flex-direction:column;}
@@ -477,6 +490,14 @@
         <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
           <a class="sheetlink" id="home-sheetlink" href="#" target="_blank" rel="noopener">📊 勤怠管理スプレッドシートを開く</a>
           <span class="sub" id="home-period">対象期間：読み込み中…</span>
+        </div>
+      </div>
+
+      <div class="adminops" id="admin-ops">
+        <button type="button" class="adminopbtn" id="admin-refresh-btn">📊 当月シートを再計算</button>
+        <div class="adminops-group">
+          <select id="admin-regen-label" class="adminops-select"></select>
+          <button type="button" class="adminopbtn" id="admin-regen-btn">🕐 この期間を再計算</button>
         </div>
       </div>
 
@@ -2550,6 +2571,7 @@
 
   function loadHomeSummary(){
     document.getElementById('home-period').textContent = '対象期間：読み込み中…';
+    ensureMonthlyLabelsLoaded_(function(){ populateMonthlyLabelSelect_('admin-regen-label', ''); });
     return fetch(portalApiUrl_('portalHomeSummary'))
       .then(function(res){ return res.json(); })
       .then(function(data){
@@ -2558,6 +2580,34 @@
       })
       .catch(function(){ showToast('通信エラーが発生しました。', true); });
   }
+
+  // ── 管理操作（スプレッドシートのメニュー「⚙️ 勤怠管理」と同じ処理をポータンから。
+  // 2026-10-19新設） ──
+  function postAdminAction_(action, extra, btn){
+    var payload = { action: action, token: idToken };
+    if (extra) { Object.keys(extra).forEach(function(k){ payload[k] = extra[k]; }); }
+    if (btn) btn.disabled = true;
+    return fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast(data.message || '完了しました。');
+        loadHomeSummary(); // 当月分の件数が変わる可能性があるため最新化
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); })
+      .finally(function(){ if (btn) btn.disabled = false; });
+  }
+
+  document.getElementById('admin-refresh-btn').addEventListener('click', function(){
+    if (!confirm('打刻確認・週別実働・月次集計を今すぐ最新データで再計算します。よろしいですか？')) return;
+    postAdminAction_('portalRefreshCurrentPeriod', null, this);
+  });
+  document.getElementById('admin-regen-btn').addEventListener('click', function(){
+    var label = document.getElementById('admin-regen-label').value;
+    if (!label) { showToast('対象の期間がありません。', true); return; }
+    if (!confirm(label + ' の期間を再計算します。よろしいですか？')) return;
+    postAdminAction_('portalRegeneratePastPeriod', { label: label }, this);
+  });
 
   // ── Googleログイン ──
   window.handleCredentialResponse = function(response){
