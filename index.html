@@ -307,9 +307,15 @@
     border-radius:999px; padding:4px 12px;}
   .homefeedactions{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
   .linklike{all:unset; cursor:pointer; font-size:12px; font-weight:700; color:var(--rail-dim);}
-  .bulkbtns{display:flex; gap:8px; flex-wrap:wrap;}
-  .bulkbtn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700;
-    padding:8px 14px; border-radius:3px; background:var(--rail-accent); color:var(--ink);}
+  /* 2026-10-19追加：承認待ち（申請一覧・修正依頼）が1件でもあれば、絞り込みをしなくても
+     常に目立つ場所にボタンを出してほしいという要望を受け新設。ホームの内訳バーの下・
+     統合一覧の上に置く専用の帯 */
+  .homeactions{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;}
+  .actionbtn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:10px;
+    padding:14px 20px; border-radius:4px; background:var(--rail); color:var(--rail-ink);
+    font-size:13.5px; font-weight:700; box-shadow:0 1px 0 rgba(0,0,0,.08); transition:background .12s;}
+  .actionbtn:hover{background:var(--rail-hover);}
+  .actionbtn .actionbtn-num{font-family:var(--mono); font-size:15px; font-weight:700; color:var(--rail-accent);}
 
   .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:14px; width:100%;
     padding:12px 18px; border-bottom:1px solid var(--field);}
@@ -469,6 +475,8 @@
         </div>
       </div>
 
+      <div class="homeactions" id="home-actions" hidden></div>
+
       <div class="homebody">
         <div class="sheet homefeedcard">
           <div class="homefeedhead">
@@ -478,7 +486,6 @@
             </div>
             <div class="homefeedactions" id="home-feed-actions" hidden>
               <button type="button" class="linklike" id="home-feed-clear">絞り込みを解除</button>
-              <div class="bulkbtns" id="home-feed-bulk"></div>
             </div>
           </div>
           <div id="home-feed-rows"></div>
@@ -2408,6 +2415,25 @@
     document.getElementById('home-seal-num').textContent = total;
     document.getElementById('home-seal-label').textContent = total === 0 ? '異常なし' : '件 要対応';
 
+    // 2026-10-19追加：絞り込みをしなくても、承認待ち（申請一覧・修正依頼）が1件でもあれば
+    // 常に目立つ位置にボタンを出す（ユーザー要望：「絞り込みをしなくても常に表示されるように
+    // したい」）。全件（items）に対する件数で判定し、フィルタ状態とは独立させる
+    var actionsWrap = document.getElementById('home-actions');
+    actionsWrap.innerHTML = '';
+    Object.keys(HOME_CATS).forEach(function(k){
+      var catInfo = HOME_CATS[k];
+      if (!catInfo.bulk) return;
+      var cnt = items.filter(function(it){ return it.category === k; }).length;
+      if (!cnt) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'actionbtn';
+      btn.innerHTML = escapeHtml(catInfo.bulk.bulkLabel) + 'を<span class="actionbtn-num">' + cnt + '件</span>まとめて確認する →';
+      btn.addEventListener('click', function(){ jumpToTab(catInfo.bulk.tab, '', catInfo.bulk.opts); });
+      actionsWrap.appendChild(btn);
+    });
+    actionsWrap.hidden = !actionsWrap.children.length;
+
     var counts = {};
     HOME_GROUP_KEYS.forEach(function(g){
       var members = HOME_GROUPS[g].members;
@@ -2445,22 +2471,6 @@
     document.getElementById('home-feed-count').textContent = rows.length + '件を表示中';
 
     document.getElementById('home-feed-actions').hidden = !homeActiveCategory;
-    var bulkWrap = document.getElementById('home-feed-bulk');
-    bulkWrap.innerHTML = '';
-    if (activeMembers) {
-      activeMembers.forEach(function(memberKey){
-        var catInfo = HOME_CATS[memberKey];
-        if (!catInfo || !catInfo.bulk) return;
-        var cnt = rows.filter(function(it){ return it.category === memberKey; }).length;
-        if (!cnt) return;
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'bulkbtn';
-        btn.textContent = catInfo.bulk.bulkLabel + 'で' + cnt + '件まとめて確認する →';
-        btn.addEventListener('click', function(){ jumpToTab(catInfo.bulk.tab, '', catInfo.bulk.opts); });
-        bulkWrap.appendChild(btn);
-      });
-    }
 
     var wrap = document.getElementById('home-feed-rows');
     wrap.innerHTML = '';
