@@ -840,6 +840,67 @@
 (function(){
   var GAS_URL = 'https://script.google.com/a/macros/nishikaru.co.jp/s/AKfycbzht6wuAjcOKeiGL20sHIEE1ip10b7haJfb5lFNahg7XN-ZBKZtwhxE3sfPhydCA21xYg/exec';
   var idToken = null, myEmail = '', myName = '';
+
+  // ── ログインの自動延長（2026-10-19新設） ──
+  // GoogleのIDトークンは約1時間で失効する。タブを開いたまま長時間操作すると
+  // 「トークン無効：invalid_token」でAPI呼び出しが失敗していた（ユーザー指摘）。
+  // ①トークン切れを検知した瞬間にGoogle One Tapで裏側から新しいトークンを取り直し、
+  // 失敗したリクエストだけ透過的に再送する（fetchを差し替えて全呼び出し箇所で共通対応）、
+  // ②さらに45分おきに先回りで裏側更新しておくことで、普段は失効そのものを起こさない。
+  // ただしGoogle側のセッション自体が切れている等、裏側更新できない場合もあるため、
+  // その時だけ画面に再ログインを促すトーストを出す（完全に無限とは言い切れない旨）
+  var TokenRefresh = {
+    waiters: [], inFlight: false,
+    request: function(){
+      if (this.inFlight) return;
+      this.inFlight = true;
+      var self = this;
+      try {
+        google.accounts.id.prompt(function(n){
+          if (n.isNotDisplayed() || n.isSkippedMoment() || n.isDismissedMoment()) self.resolveAll(false);
+        });
+      } catch (e) { self.resolveAll(false); }
+      setTimeout(function(){ self.resolveAll(false); }, 5000);
+    },
+    resolveAll: function(ok){
+      if (!this.inFlight) return;
+      this.inFlight = false;
+      var ws = this.waiters; this.waiters = [];
+      ws.forEach(function(w){ w(ok); });
+    },
+    wait: function(){
+      var self = this;
+      return new Promise(function(resolve){ self.waiters.push(resolve); self.request(); });
+    },
+  };
+
+  var nativeFetch_ = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    return nativeFetch_(input, init).then(function(res){
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      if (!res.ok || url.indexOf(GAS_URL) !== 0) return res;
+      return res.clone().json().then(function(data){
+        if (!(data && data.success === false && typeof data.error === 'string' && data.error.indexOf('トークン無効') === 0)) return res;
+        return TokenRefresh.wait().then(function(ok){
+          if (!ok) {
+            showToast('ログインの有効期限が切れました。画面を再読み込みしてサインインし直してください。', true);
+            return res;
+          }
+          var retryInput = input, retryInit = init;
+          if (typeof input === 'string' && input.indexOf('token=') !== -1) {
+            retryInput = input.replace(/token=[^&]*/, 'token=' + encodeURIComponent(idToken));
+          }
+          if (init && init.body) {
+            try {
+              var body = JSON.parse(init.body);
+              if (body && 'token' in body) { body.token = idToken; retryInit = Object.assign({}, init, { body: JSON.stringify(body) }); }
+            } catch (e) {}
+          }
+          return nativeFetch_(retryInput, retryInit);
+        });
+      }).catch(function(){ return res; }); // JSON以外の応答（まれ）はそのまま通す
+    });
+  };
   // 2026-10-18新設：年度選択（過去の年度のスプレッドシートを閲覧する機能）。
   // currentSsId=''は「現在の年度」、それ以外は過去年度のスプレッドシートID。
   // 書き込み系（承認/否認・伝言板の新規作成等）のdoPostはssIdを一切見ないため、
@@ -2423,6 +2484,13 @@
       myName  = payload.name || '';
     } catch (e) {}
 
+    // 既にログイン済み（app表示中）なら、裏側でのトークン自動更新なので画面は何も
+    // 変えずトークンを差し替えるだけにする（TokenRefresh.wait()で待っている処理を再開させる）
+    if (document.getElementById('app').classList.contains('show')) {
+      TokenRefresh.resolveAll(true);
+      return;
+    }
+
     document.getElementById('loadingNote').style.display = 'block';
     fetch(GAS_URL + '?mode=checkDairiAdmin&token=' + encodeURIComponent(idToken))
       .then(function(res){ return res.json(); })
@@ -2437,6 +2505,9 @@
         document.getElementById('signedInAs').textContent = 'ログイン中：' + myEmail;
         tabReady.home = loadHomeSummary();
         loadFiscalYears_();
+        // ログイン後45分おきに先回りでトークンを裏側更新し、1時間の失効時間切れを
+        // そもそも起こしにくくする（失効してしまった場合もTokenRefresh.wait()側が拾う）
+        setInterval(function(){ TokenRefresh.request(); }, 45 * 60 * 1000);
       })
       .catch(function(){
         document.getElementById('loadingNote').style.display = 'none';
