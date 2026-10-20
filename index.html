@@ -418,6 +418,7 @@
   .guide-sec{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:22px 24px; scroll-margin-top:16px;}
   .guide-sec h2{font-family:var(--display); font-weight:900; font-size:16px; margin:0 0 10px; display:flex; align-items:baseline; gap:10px;}
   .guide-sec h2 .num{font-family:var(--stamp); font-size:24px; color:var(--rail-accent);}
+  .guide-sec.aud-overview{border-left:4px solid var(--rail-accent);}
   .guide-sec.aud-soumu{border-left:4px solid var(--rail);}
   .guide-sec.aud-shain{border-left:4px solid var(--provisional);}
   .guide-sec.aud-faq{border-left:4px solid var(--mistake);}
@@ -426,9 +427,19 @@
   .guide-sec ul{margin:0 0 10px; padding-left:20px; font-size:13px; line-height:1.8;}
   .guide-audtag{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:999px;
     font-family:var(--mono); margin-bottom:10px;}
+  .aud-overview .guide-audtag{background:var(--rail-accent); color:var(--ink);}
   .aud-soumu .guide-audtag{background:var(--rail); color:var(--rail-ink);}
   .aud-shain .guide-audtag{background:var(--provisional); color:#fff;}
   .aud-faq .guide-audtag{background:var(--mistake); color:#fff;}
+
+  .guide-table{margin:4px 0 10px;}
+  .guide-table tbody tr{cursor:default;}
+  .guide-table tbody tr:hover{background:transparent;}
+
+  .guide-glossary{margin:4px 0 0; font-size:13px;}
+  .guide-glossary dt{font-weight:700; font-family:var(--mono); color:var(--rail); margin-top:12px;}
+  .guide-glossary dt:first-child{margin-top:0;}
+  .guide-glossary dd{margin:3px 0 0; line-height:1.8; color:var(--ink);}
 
   .guide-faqitem{border-top:1px dashed var(--line); padding:14px 0;}
   .guide-faqitem:first-of-type{border-top:none; padding-top:4px;}
@@ -828,6 +839,13 @@
       <div class="guide-layout">
         <nav class="guide-toc">
           <div class="toc-group">
+            <h3>はじめに</h3>
+            <ul>
+              <li><a href="#guide-tabs">ポータルの13タブ早見表</a></li>
+              <li><a href="#guide-glossary">用語集</a></li>
+            </ul>
+          </div>
+          <div class="toc-group">
             <h3>総務・社長向け</h3>
             <ul>
               <li><a href="#guide-home">ホーム画面の見方</a></li>
@@ -851,9 +869,52 @@
         </nav>
         <div class="guide-content">
 
+          <section class="guide-sec aud-overview" id="guide-tabs">
+            <span class="guide-audtag">はじめに</span>
+            <h2><span class="num">01</span>ポータルの13タブ早見表</h2>
+            <p>左のレールに並ぶタブは、それぞれ以下のような役割です。初めて開いた時は、まず<b>ホーム</b>から見るのがおすすめです（対応が必要なことが一覧になっています）。</p>
+            <table class="guide-table">
+              <thead><tr><th>タブ</th><th class="txtleft">主な用途</th><th>閲覧／編集</th></tr></thead>
+              <tbody>
+                <tr><td>🏠 ホーム</td><td class="txtleft">対応が必要な件数・一覧をまとめて確認する入り口</td><td>閲覧</td></tr>
+                <tr><td>📋 申請一覧</td><td class="txtleft">有給・残業・出張などの申請を確認し、承認／仮承認／否認する</td><td>閲覧＋承認操作</td></tr>
+                <tr><td>🛠️ 修正依頼</td><td class="txtleft">打刻ミスの修正依頼を確認し、対応状況を変更する（対応済にすると打刻ログへの反映を自動で試みる）</td><td>閲覧＋対応操作</td></tr>
+                <tr><td>🕒 打刻ログ</td><td class="txtleft">全社員の生の打刻記録（出勤・退勤・外出・帰社）を検索する</td><td>閲覧専用</td></tr>
+                <tr><td>📊 36協定</td><td class="txtleft">年間残業累計・36協定の残り・複数月平均などを社員ごとに確認する</td><td>閲覧専用</td></tr>
+                <tr><td>🏖️ 有給管理</td><td class="txtleft">通常有給・積立有給の残日数・消化日数を確認する</td><td>閲覧専用</td></tr>
+                <tr><td>🎌 特別休暇管理</td><td class="txtleft">慶弔・傷病等特別休暇・積立有給の申請ごとの消化状況を確認する</td><td>閲覧専用</td></tr>
+                <tr><td>💬 伝言板</td><td class="txtleft">社員への伝言を確認する</td><td>閲覧＋新規作成</td></tr>
+                <tr><td>📅 月次集計</td><td class="txtleft">月ごとの出勤時間・残業・有給消化等の集計表（給与じまん用）</td><td>閲覧専用</td></tr>
+                <tr><td>📆 週別実働</td><td class="txtleft">週ごとの実働時間・残業・40h残り等を確認する</td><td>閲覧専用</td></tr>
+                <tr><td>🗓️ 打刻確認</td><td class="txtleft">社員×日付のマス目で、申請なし・残業警告等の異常を一覧確認する</td><td>閲覧専用</td></tr>
+                <tr><td>📇 社員マスタ</td><td class="txtleft">氏名・雇用区分・定時・勤務曜日などの基本情報を確認する</td><td>閲覧専用</td></tr>
+                <tr><td>📖 使い方ガイド</td><td class="txtleft">このページ。ポータルの使い方・用語・よくある質問をまとめている</td><td>閲覧専用</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="guide-sec aud-overview" id="guide-glossary">
+            <span class="guide-audtag">はじめに</span>
+            <h2><span class="num">02</span>用語集</h2>
+            <dl class="guide-glossary">
+              <dt>承認待ち／仮承認／承認済／否認</dt>
+              <dd>申請一覧の承認ステータス。否認に変更すると、消化済みだった有給は自動的に戻ります。</dd>
+              <dt>対応待ち／対応中／対応済</dt>
+              <dd>修正依頼の対応状況。対応済に変更すると、打刻ログへの反映を自動で試みます。</dd>
+              <dt>事前／事後</dt>
+              <dd>遅刻・早退などの申請を、休む前に出すか（事前）、もう打刻済みの後に出すか（事後）。事後は実際の打刻時刻が自動で入力されます。</dd>
+              <dt>申請なし◯◯</dt>
+              <dd>打刻はあるのに、対応する申請（遅刻・早退・中抜け・休日出勤）がまだ出ていない状態。対応する申請が承認されると表示は自動的に消えます。</dd>
+              <dt>集計期間（21日締め）</dt>
+              <dd>前月21日〜当月20日を1期間として集計する給与の締めサイクル。「今月」はこの期間のことを指します。</dd>
+              <dt>集計用時刻／実打刻</dt>
+              <dd>実打刻はNFCで実際に打刻した生の時刻。集計用時刻は、そこへ会社の丸めルール（残業申請の有無など）を反映して補正した時刻です。打刻ログタブに表示されているのは集計用時刻です。</dd>
+            </dl>
+          </section>
+
           <section class="guide-sec aud-soumu" id="guide-home">
             <span class="guide-audtag">総務・社長向け</span>
-            <h2><span class="num">01</span>ホーム画面の見方</h2>
+            <h2><span class="num">03</span>ホーム画面の見方</h2>
             <p>一番上の判（件数）と内訳バーは、今期間中に対応が必要な件数の全体像です。内訳バーの各色をクリックすると、下の「対応が必要な一覧」がその種類だけに絞り込まれます。</p>
             <p><b>対応が必要な一覧</b>には、承認待ちの申請・修正依頼・申請なし◯◯（打刻はあるのに申請が出ていない状態）がまとまって表示されます。「◯件まとめて確認する」ボタンを押すと、申請一覧・修正依頼の両方から該当分だけに絞り込んで開けます。</p>
             <p>右側の「注意リスト」は、有給残日数が少ない社員・有給消化率が低い社員・残業に注意が必要な社員を別枠で表示しています（すぐに対応が必要というより、早めに気づいておきたい情報です）。</p>
@@ -861,7 +922,7 @@
 
           <section class="guide-sec aud-soumu" id="guide-approve">
             <span class="guide-audtag">総務・社長向け</span>
-            <h2><span class="num">02</span>承認待ち・修正依頼への対応</h2>
+            <h2><span class="num">04</span>承認待ち・修正依頼への対応</h2>
             <p><b>申請一覧</b>タブで承認ステータスを「承認済」「仮承認」「否認」に変更すると、本人へのチャット通知・有給残日数の消化・特別休暇管理シートへの反映などが自動で行われます。</p>
             <p><b>修正依頼</b>タブで対応状況を「対応済」に変更すると、打刻ログへの反映（時刻の修正・打刻の追加／削除）が自動で試みられます。対象の打刻が1件に絞り込めない場合（同じ日に外出・帰社が複数回あるなど）は自動反映されず「未処理」として記録されるため、その場合は打刻ログを直接確認・修正してください。</p>
             <p>「申請なし◯◯」の表示は、対応する申請や修正依頼が承認されると自動的に消えます。</p>
@@ -869,7 +930,7 @@
 
           <section class="guide-sec aud-soumu" id="guide-period">
             <span class="guide-audtag">総務・社長向け</span>
-            <h2><span class="num">03</span>当月の再計算／過去の期間を再計算</h2>
+            <h2><span class="num">05</span>当月の再計算／過去の期間を再計算</h2>
             <p>ホーム画面上部の操作バーには2つのボタンがあります。</p>
             <ul>
               <li><b>📊 当月シートを再計算</b>：今、進行中の期間（打刻確認・月次集計・週別実働・36協定）をその場で再計算します。申請の事後承認や打刻修正をした直後、数字をすぐ反映させたい時に使います。</li>
@@ -880,21 +941,21 @@
 
           <section class="guide-sec aud-shain" id="guide-dakoku">
             <span class="guide-audtag">社員向け（参考）</span>
-            <h2><span class="num">04</span>打刻の基本</h2>
+            <h2><span class="num">06</span>打刻の基本</h2>
             <p>タブレットにNFCカードをかざすと、出勤・退勤・外出・帰社が自動で判定されます。間違った種別で打刻してしまった、打刻自体を忘れた、という場合は打刻し直すのではなく、<b>勤怠申請アプリの「打刻修正依頼」</b>から正しい内容を申請してもらいます。</p>
             <p>画面に警告（⚠️「◯◯申請がありません」等）が出た場合は、打刻自体はできていますが対応する申請がまだ出ていない状態です。該当する申請（遅刻・早退・中抜け・休日出勤など）を提出すれば表示は消えます。</p>
           </section>
 
           <section class="guide-sec aud-shain" id="guide-app">
             <span class="guide-audtag">社員向け（参考）</span>
-            <h2><span class="num">05</span>勤怠申請アプリでの申請</h2>
+            <h2><span class="num">07</span>勤怠申請アプリでの申請</h2>
             <p>有給・遅刻・早退／残業／打刻修正依頼／出張の4種類は、すべて「勤怠申請アプリ」（Googleアカウントでログインする専用アプリ）から行います。各申請は本人が「対応待」の間はいつでも内容を編集できます。</p>
             <p>遅刻・早退・中抜けなどは「事前」（これから休む）と「事後」（もう打刻済み）のどちらで申請するかを最初に選びます。事後を選ぶと実際の打刻時刻が自動で入力されるため、基本的にはそのまま送信するだけで構いません。</p>
           </section>
 
           <section class="guide-sec aud-faq" id="guide-faq">
             <span class="guide-audtag">こんな時はどうする？</span>
-            <h2><span class="num">06</span>よくある質問・実例</h2>
+            <h2><span class="num">08</span>よくある質問・実例</h2>
 
             <details class="guide-faqitem">
               <summary>打刻ミスに対して修正依頼を出したが、「承認待ち」の一覧に出てこない？</summary>
@@ -921,6 +982,41 @@
               <summary>「申請なし◯◯」の表示が、申請を承認したのに消えない</summary>
               <div class="guide-faqans"><div>
                 <p>打刻ログの備考欄は、一度書き込まれると自動では書き換わりません（対応する修正依頼・申請が承認された時点で、該当のタグだけ自動的に消す仕組みが別途入っています）。それでも残っている場合は、打刻ログの備考欄を直接確認・編集してください。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>有給が2日間など複数日にまたがる申請は、途中の日もちゃんと数えられる？</summary>
+              <div class="guide-faqans"><div>
+                <p>開始日〜終了日の日数分がまとめて有給管理シートの消化済み日数に反映されます。1日目だけ確定して2日目以降が抜ける、ということはありません。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>ホームの「残業に注意が必要な社員」「有給消化率が低い社員」は、何を基準に出ている？</summary>
+              <div class="guide-faqans"><div>
+                <p>残業は36協定の月45h・年360hのしきい値に近い社員、有給消化率は消化済み日数÷付与日数が低い社員が自動的に上位表示されます。該当者がいない時は表示されません（0件は異常ではありません）。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>修正依頼を「対応済」にしたのに、打刻ログに反映されず「未処理」のままになっている</summary>
+              <div class="guide-faqans"><div>
+                <p>同じ日に同じ種別の打刻が複数回あるなど、どの行を直せばいいか自動では1件に絞り込めない場合、誤った行を書き換える事故を防ぐためあえて何もせず「未処理」の理由を記録しています。この場合は打刻ログタブで対象の行を直接確認・修正してください。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>事後申請（もう打刻済みの遅刻・早退等）で、実際の時間より多めに有給を消化したい</summary>
+              <div class="guide-faqans"><div>
+                <p>事後申請は実際の打刻時刻が自動入力されますが、勤怠申請アプリの「時間を調整する」リンクから本人が編集でき、2/4/6時間単位に切り上げて申請し直すことができます。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>休日出勤の休憩（昼休憩・午後休憩）はどう記録される？</summary>
+              <div class="guide-faqans"><div>
+                <p>休日は固定の休憩時間帯が無いため、残業申請・出張届の「昼休憩／午後休憩」の質問（はい／いいえ）で本人に申告してもらいます。実働6時間以上で45分、8時間以上で60分に満たない場合は、休憩不足として自動的に総務へ通知されます。</p>
               </div></div>
             </details>
 
