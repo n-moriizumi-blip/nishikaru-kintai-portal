@@ -401,6 +401,53 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
   .toast.err{background:var(--denied);}
 
+  /* ── 使い方ガイド（2026-10-20新設） ── */
+  html{scroll-behavior:smooth;}
+  .guide-layout{display:flex; align-items:flex-start; gap:28px;}
+  .guide-toc{position:sticky; top:16px; flex:0 0 200px; background:var(--panel); border:1px solid var(--line);
+    border-radius:4px; padding:16px 14px; font-size:12.5px;}
+  .guide-toc h3{margin:0 0 8px; font-family:var(--display); font-weight:900; font-size:11px; letter-spacing:.06em;
+    color:var(--dim); text-transform:uppercase;}
+  .guide-toc ul{list-style:none; margin:0 0 14px; padding:0;}
+  .guide-toc .toc-group:last-child ul{margin-bottom:0;}
+  .guide-toc li+li{margin-top:2px;}
+  .guide-toc a{display:block; padding:5px 8px; border-radius:4px; color:var(--ink); text-decoration:none; font-weight:700;}
+  .guide-toc a:hover{background:var(--field);}
+
+  .guide-content{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:28px;}
+  .guide-sec{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:22px 24px; scroll-margin-top:16px;}
+  .guide-sec h2{font-family:var(--display); font-weight:900; font-size:16px; margin:0 0 10px; display:flex; align-items:baseline; gap:10px;}
+  .guide-sec h2 .num{font-family:var(--stamp); font-size:24px; color:var(--rail-accent);}
+  .guide-sec.aud-soumu{border-left:4px solid var(--rail);}
+  .guide-sec.aud-shain{border-left:4px solid var(--provisional);}
+  .guide-sec.aud-faq{border-left:4px solid var(--mistake);}
+  .guide-sec p{font-size:13px; line-height:1.8; color:var(--ink); margin:0 0 10px;}
+  .guide-sec p:last-child{margin-bottom:0;}
+  .guide-sec ul{margin:0 0 10px; padding-left:20px; font-size:13px; line-height:1.8;}
+  .guide-audtag{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:999px;
+    font-family:var(--mono); margin-bottom:10px;}
+  .aud-soumu .guide-audtag{background:var(--rail); color:var(--rail-ink);}
+  .aud-shain .guide-audtag{background:var(--provisional); color:#fff;}
+  .aud-faq .guide-audtag{background:var(--mistake); color:#fff;}
+
+  .guide-faqitem{border-top:1px dashed var(--line); padding:14px 0;}
+  .guide-faqitem:first-of-type{border-top:none; padding-top:4px;}
+  .guide-faqitem summary{cursor:pointer; font-weight:700; font-size:13.5px; color:var(--ink); list-style:none;
+    display:flex; gap:10px;}
+  .guide-faqitem summary::-webkit-details-marker{display:none;}
+  .guide-faqitem summary::before{content:"Q"; font-family:var(--stamp); color:var(--mistake); flex-shrink:0;}
+  .guide-faqitem[open] summary{margin-bottom:8px;}
+  .guide-faqans{display:flex; gap:10px; font-size:13px; line-height:1.8; color:var(--dim);}
+  .guide-faqans::before{content:"A"; font-family:var(--stamp); color:var(--rail); flex-shrink:0;}
+  .guide-faqans p{margin:0 0 6px; color:var(--dim);}
+  .guide-faqans p:last-child{margin-bottom:0;}
+  .guide-footnote{font-size:11.5px; color:var(--dim); text-align:center;}
+
+  @media (max-width:900px){
+    .guide-layout{flex-direction:column;}
+    .guide-toc{position:static; width:100%; flex:0 0 auto;}
+  }
+
   /* ── 年度選択（レール上部、全タブ共通。2026-10-18新設） ──
      レール内側（.rail-inner）は常に固定幅（220px）で、外側の.railが64px/220pxの「窓」として
      クリップする作り（ナビボタンの文字もこれで折りたたみ時に隠れている）。ボタンの文字は
@@ -479,7 +526,8 @@
       <button data-nav="gesshu"><span class="ic">📅</span>月次集計</button>
       <button data-nav="shuubetsu"><span class="ic">📆</span>週別実働</button>
       <button data-nav="dakokukakunin"><span class="ic">🗓️</span>打刻確認</button>
-      <button data-nav="shain"><span class="ic">👤</span>社員マスタ</button>
+      <button data-nav="shain"><span class="ic">📇</span>社員マスタ</button>
+      <button data-nav="guide"><span class="ic">📖</span>使い方ガイド</button>
     </nav>
     <div class="who" id="signedInAs"></div>
   </div></div>
@@ -773,6 +821,120 @@
           <tbody id="shain-tbody"></tbody>
         </table>
         <div class="emptystate" id="shain-emptystate" hidden>条件に一致する社員がいません。</div>
+      </div>
+    </div>
+    <div id="page-guide" hidden>
+      <div class="pagehead"><h1>📖 使い方ガイド</h1><span class="sub">GUIDE / HANDBOOK</span></div>
+      <div class="guide-layout">
+        <nav class="guide-toc">
+          <div class="toc-group">
+            <h3>総務・社長向け</h3>
+            <ul>
+              <li><a href="#guide-home">ホーム画面の見方</a></li>
+              <li><a href="#guide-approve">承認待ち・修正依頼への対応</a></li>
+              <li><a href="#guide-period">当月の再計算／過去の期間を再計算</a></li>
+            </ul>
+          </div>
+          <div class="toc-group">
+            <h3>社員向け（参考資料）</h3>
+            <ul>
+              <li><a href="#guide-dakoku">打刻の基本</a></li>
+              <li><a href="#guide-app">勤怠申請アプリでの申請</a></li>
+            </ul>
+          </div>
+          <div class="toc-group">
+            <h3>こんな時はどうする？</h3>
+            <ul>
+              <li><a href="#guide-faq">よくある質問・実例</a></li>
+            </ul>
+          </div>
+        </nav>
+        <div class="guide-content">
+
+          <section class="guide-sec aud-soumu" id="guide-home">
+            <span class="guide-audtag">総務・社長向け</span>
+            <h2><span class="num">01</span>ホーム画面の見方</h2>
+            <p>一番上の判（件数）と内訳バーは、今期間中に対応が必要な件数の全体像です。内訳バーの各色をクリックすると、下の「対応が必要な一覧」がその種類だけに絞り込まれます。</p>
+            <p><b>対応が必要な一覧</b>には、承認待ちの申請・修正依頼・申請なし◯◯（打刻はあるのに申請が出ていない状態）がまとまって表示されます。「◯件まとめて確認する」ボタンを押すと、申請一覧・修正依頼の両方から該当分だけに絞り込んで開けます。</p>
+            <p>右側の「注意リスト」は、有給残日数が少ない社員・有給消化率が低い社員・残業に注意が必要な社員を別枠で表示しています（すぐに対応が必要というより、早めに気づいておきたい情報です）。</p>
+          </section>
+
+          <section class="guide-sec aud-soumu" id="guide-approve">
+            <span class="guide-audtag">総務・社長向け</span>
+            <h2><span class="num">02</span>承認待ち・修正依頼への対応</h2>
+            <p><b>申請一覧</b>タブで承認ステータスを「承認済」「仮承認」「否認」に変更すると、本人へのチャット通知・有給残日数の消化・特別休暇管理シートへの反映などが自動で行われます。</p>
+            <p><b>修正依頼</b>タブで対応状況を「対応済」に変更すると、打刻ログへの反映（時刻の修正・打刻の追加／削除）が自動で試みられます。対象の打刻が1件に絞り込めない場合（同じ日に外出・帰社が複数回あるなど）は自動反映されず「未処理」として記録されるため、その場合は打刻ログを直接確認・修正してください。</p>
+            <p>「申請なし◯◯」の表示は、対応する申請や修正依頼が承認されると自動的に消えます。</p>
+          </section>
+
+          <section class="guide-sec aud-soumu" id="guide-period">
+            <span class="guide-audtag">総務・社長向け</span>
+            <h2><span class="num">03</span>当月の再計算／過去の期間を再計算</h2>
+            <p>ホーム画面上部の操作バーには2つのボタンがあります。</p>
+            <ul>
+              <li><b>📊 当月シートを再計算</b>：今、進行中の期間（打刻確認・月次集計・週別実働・36協定）をその場で再計算します。申請の事後承認や打刻修正をした直後、数字をすぐ反映させたい時に使います。</li>
+              <li><b>🕐 過去の期間を再計算</b>：締め切り日（21日）をまたいで事後承認・打刻修正が入った場合に使います。右側のプルダウンで対象の期間（例：26.07）を選んでから実行してください。過去の期間は自動では再計算されないため、該当月の数字がおかしいと感じたら、まずこの操作を試してください。</li>
+            </ul>
+            <p>どちらの操作も、現在表示している年度のスプレッドシートに対してのみ行われます（過去の年度を閲覧中はこの操作バー自体が表示されません）。</p>
+          </section>
+
+          <section class="guide-sec aud-shain" id="guide-dakoku">
+            <span class="guide-audtag">社員向け（参考）</span>
+            <h2><span class="num">04</span>打刻の基本</h2>
+            <p>タブレットにNFCカードをかざすと、出勤・退勤・外出・帰社が自動で判定されます。間違った種別で打刻してしまった、打刻自体を忘れた、という場合は打刻し直すのではなく、<b>勤怠申請アプリの「打刻修正依頼」</b>から正しい内容を申請してもらいます。</p>
+            <p>画面に警告（⚠️「◯◯申請がありません」等）が出た場合は、打刻自体はできていますが対応する申請がまだ出ていない状態です。該当する申請（遅刻・早退・中抜け・休日出勤など）を提出すれば表示は消えます。</p>
+          </section>
+
+          <section class="guide-sec aud-shain" id="guide-app">
+            <span class="guide-audtag">社員向け（参考）</span>
+            <h2><span class="num">05</span>勤怠申請アプリでの申請</h2>
+            <p>有給・遅刻・早退／残業／打刻修正依頼／出張の4種類は、すべて「勤怠申請アプリ」（Googleアカウントでログインする専用アプリ）から行います。各申請は本人が「対応待」の間はいつでも内容を編集できます。</p>
+            <p>遅刻・早退・中抜けなどは「事前」（これから休む）と「事後」（もう打刻済み）のどちらで申請するかを最初に選びます。事後を選ぶと実際の打刻時刻が自動で入力されるため、基本的にはそのまま送信するだけで構いません。</p>
+          </section>
+
+          <section class="guide-sec aud-faq" id="guide-faq">
+            <span class="guide-audtag">こんな時はどうする？</span>
+            <h2><span class="num">06</span>よくある質問・実例</h2>
+
+            <details class="guide-faqitem">
+              <summary>打刻ミスに対して修正依頼を出したが、「承認待ち」の一覧に出てこない？</summary>
+              <div class="guide-faqans"><div>
+                <p>修正依頼は申請一覧とは別のシートですが、ホーム画面の「対応が必要な一覧」では申請一覧の承認待ちと修正依頼の対応待ちをまとめて「承認待ち」として扱っています。「◯件まとめて確認する」ボタンを押すと、両方のタブから該当分だけ絞り込んで開けます。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>在宅勤務などでNFC打刻ができない休日残業は、どう記録すればいい？</summary>
+              <div class="guide-faqans"><div>
+                <p>残業申請だけでは打刻ログに記録が残らないため、月次集計には反映されません。残業申請の承認後に、「打刻修正依頼」の「打刻の追加」で、その日の出勤・退勤を1件ずつ申請してもらってください。<b>残業申請を先に承認してから、打刻の追加を処理する順番</b>が重要です（逆だと休日出勤としての集計が正しく働きません）。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>36協定シートの「年間残業累計」の数字がおかしい気がする</summary>
+              <div class="guide-faqans"><div>
+                <p>まず「当月シートを再計算」または対象期間の「過去の期間を再計算」を試してください。それでも数字が変わらない場合は、該当セルの表示形式が崩れていないか確認してください（まれに、値自体は正しいのにセルの書式だけが24時間で折り返して表示されることがあります）。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>承認済みの申請の内容（時間帯や種別）を間違えて承認してしまった</summary>
+              <div class="guide-faqans"><div>
+                <p>承認済みの行を直接編集しないでください（有給消化の計算が合わなくなります）。いったん「否認」に変更して消化分を自動で戻し、社員に正しい内容で再申請してもらってから、改めて承認してください。</p>
+              </div></div>
+            </details>
+
+            <details class="guide-faqitem">
+              <summary>「申請なし◯◯」の表示が、申請を承認したのに消えない</summary>
+              <div class="guide-faqans"><div>
+                <p>打刻ログの備考欄は、一度書き込まれると自動では書き換わりません（対応する修正依頼・申請が承認された時点で、該当のタグだけ自動的に消す仕組みが別途入っています）。それでも残っている場合は、打刻ログの備考欄を直接確認・編集してください。</p>
+              </div></div>
+            </details>
+
+          </section>
+
+          <p class="guide-footnote">このガイドは会話の中で仕様を調整・追加するたびに随時更新しています。記載が古いと感じた箇所があれば教えてください。</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1232,7 +1394,7 @@
     btn.addEventListener('click', function(){
       document.querySelectorAll('.rail nav button').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
-      ['home','shinsei','shusei','dakoku','shuukei','yukyu','tokubetsu','dengon','gesshu','shuubetsu','dakokukakunin','shain'].forEach(function(name){
+      ['home','shinsei','shusei','dakoku','shuukei','yukyu','tokubetsu','dengon','gesshu','shuubetsu','dakokukakunin','shain','guide'].forEach(function(name){
         document.getElementById('page-' + name).hidden = (name !== btn.dataset.nav);
       });
       // ホーム画面からのジャンプではなく、ナビを直接クリックしてタブを開いた場合は、
