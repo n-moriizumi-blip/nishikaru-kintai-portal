@@ -348,16 +348,18 @@
   .actionbtn .actionbtn-num{font-family:var(--mono); font-size:15px; font-weight:700; color:#fff;
     background:var(--rail); border-radius:999px; padding:3px 10px; letter-spacing:.02em;}
 
-  .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:14px; width:100%;
+  .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:flex-start; gap:14px; width:100%;
     padding:12px 18px; border-bottom:1px solid var(--field);}
   .feedrow:last-child{border-bottom:none;}
   .feedrow:hover{background:var(--bg);}
   .feedtag{flex:0 0 84px; font-size:10.5px; font-weight:700; text-align:center; padding:3px 0; border-radius:3px; color:#fff;}
-  .feedname{flex:0 0 100px; font-size:13px; font-weight:700; color:var(--ink);}
-  .feeddetail{flex:1 1 auto; min-width:0; font-size:12.5px; color:var(--ink); text-align:left; overflow:hidden;
-    text-overflow:ellipsis; white-space:nowrap;}
-  .feedmeta{flex:0 0 auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim);}
-  .feedarrow{flex:0 0 auto; color:var(--line); font-size:13px;}
+  .feedname{flex:0 0 100px; font-size:13px; font-weight:700; color:var(--ink); padding-top:3px;}
+  /* 2026-10-21修正：要確認の文言（検知内容の詳細込み）が1行に収まらず見切れていたため、
+     省略せず折り返して全文表示するようにした（代わりに行の高さが可変になる） */
+  .feeddetail{flex:1 1 auto; min-width:0; font-size:12.5px; line-height:1.55; color:var(--ink); text-align:left;
+    white-space:normal; word-break:break-word; padding-top:2px;}
+  .feedmeta{flex:0 0 auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim); padding-top:3px;}
+  .feedarrow{flex:0 0 auto; color:var(--line); font-size:13px; padding-top:1px;}
 
   /* ── 注意リスト（有給残少・残業注意。2026-10-18、対応が必要な一覧とは切り離した。
      承認・否認のような「処理すれば終わる」ものではなく、状況を把握するための監視情報
@@ -2763,7 +2765,7 @@
     // 申請なので「未承認でまだ何も判断していない」ものと一緒くたにするのは紛らわしいという
     // 指摘を受け、独立したカテゴリに分離した。対象の申請一覧は承認状況がバラバラ（否認以外は
     // 来ない）なので状況での絞り込みは使わず、個別の行クリックでそのままジャンプする
-    review: { label:'要確認', bulk:{ tab:'shinsei', opts:{ needsReviewOnly:true }, bulkLabel:'申請一覧' } },
+    review: { label:'要確認', bulk:{ tab:'shinsei', opts:{ needsReviewOnly:true }, bulkLabel:'要確認の申請' } },
   };
   // 2026-10-19追加：ユーザー指摘「修正依頼（打刻ミス）は、申請が出ている以上は承認待ちの
   // 扱いの方が自然」を受け、集計・絞り込みは「承認待ち」（申請一覧＋修正依頼の合算）と
