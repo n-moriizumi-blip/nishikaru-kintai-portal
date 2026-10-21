@@ -1829,7 +1829,10 @@
 
   // 2026-10-21新設：承認済にしたのに打刻ログへ自動反映できなかった（K列が未処理のまま）行
   // だけを絞り込む（buildAutoResultBadge_と同じ判定基準）
-  function isUnresolved_(r){ return !!(r.autoResult && r.autoResult.indexOf('✅') !== 0); }
+  // 2026-10-21修正：ステータスを見ずに自動処理結果の文言だけで判定していたため、後から否認した
+  // 行（例：SHU010〜012）も「要確認」のまま残ってしまっていた。サーバー側（portalHomeSummaryの
+  // isUnresolvedApproved、コード.gs）と同じく「承認済」限定の判定に揃えた
+  function isUnresolved_(r){ return r.status === '承認済' && !!(r.autoResult && r.autoResult.indexOf('✅') !== 0); }
 
   function sMatches(r){
     if (sState.status && r.status !== sState.status) return false;
