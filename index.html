@@ -2718,9 +2718,12 @@
       });
     });
     data.shusei.current.concat(data.shusei.prev).forEach(function(r){
+      // 2026-10-21追加：承認済だが打刻ログへ自動反映できなかった行（r.autoResultが
+      // ✅で始まらない）も対象のため、一覧の文言でそれと分かるようにする
+      var isUnresolved = r.status === '承認済' && r.autoResult && r.autoResult.indexOf('✅') !== 0;
       items.push({
         category: 'mistake', name: r.name,
-        detail  : r.content,
+        detail  : isUnresolved ? (r.content + '（承認済みだが打刻ログへ未反映：' + r.autoResult + '）') : r.content,
         meta    : elapsedLabel_(r.appDateTime),
         jump    : function(){ jumpToTab('shusei', r.name); },
       });
