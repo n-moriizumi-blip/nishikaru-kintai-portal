@@ -2693,7 +2693,7 @@
         jump    : function(){ jumpToTab('dakoku', r.name, { date: r.dateStr.replace(/\//g, '-') }); },
       });
     });
-    data.shusei.forEach(function(r){
+    data.shusei.current.concat(data.shusei.prev).forEach(function(r){
       items.push({
         category: 'mistake', name: r.name,
         detail  : r.content,
