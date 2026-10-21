@@ -2850,16 +2850,63 @@
     renderHomeWatch_(data);
   }
 
-  function loadHomeSummary(){
-    document.getElementById('home-period').textContent = '対象期間：読み込み中…';
-    ensureMonthlyLabelsLoaded_(function(){ populateMonthlyLabelSelect_('admin-regen-label', ''); });
+  // 2026-10-21新設：裏側の定期自動更新（quiet=true）専用の反映。明示的な読み込み
+  // （ナビクリック・初回ログイン）と違い、①絞り込み中のカテゴリ（homeActiveCategory）を
+  // 維持する（勝手に解除しない）②対象期間欄を一瞬「読み込み中…」にしない、という
+  // 2点で画面がちらつかない・操作中の状態が消えないようにしている
+  function renderHomeQuiet_(data){
+    homeData = data;
+    document.getElementById('home-period').textContent = '対象期間：' + data.period.start + ' 〜 ' + data.period.end;
+    document.getElementById('home-sheetlink').href = data.spreadsheetUrl;
+    renderHomeAll_();
+    renderHomeWatch_(data);
+  }
+
+  // quiet=true：60秒おきの裏側の定期自動更新から呼ばれる。失敗してもトースト等は出さず
+  // 黙って次回に任せる（通信が一瞬不安定なだけで画面を乱したくないため）
+  function loadHomeSummary(quiet){
+    if (!quiet) {
+      document.getElementById('home-period').textContent = '対象期間：読み込み中…';
+      ensureMonthlyLabelsLoaded_(function(){ populateMonthlyLabelSelect_('admin-regen-label', ''); });
+    }
     return fetch(portalApiUrl_('portalHomeSummary'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || 'ホーム画面の取得に失敗しました。', true); return; }
-        renderHome(data);
+        if (!data.success) { if (!quiet) showToast(data.error || 'ホーム画面の取得に失敗しました。', true); return; }
+        if (quiet) renderHomeQuiet_(data); else renderHome(data);
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
+  }
+
+  // 2026-10-21新設：ホーム画面を60秒おきに裏側で自動更新する（ユーザー要望：「他タブで
+  // 承認した後ホームへ戻っても古いまま」「開きっぱなしの間も自動で最新化してほしい」）。
+  // 60秒という間隔は、総務が別タブで作業→ホームへ戻る、という体感の待ち時間を無くしつつ、
+  // サーバー（GAS）への負荷もかけすぎない頃合いとして選んだ（変更したい場合はここの数値のみ）。
+  // どのタブを見ている間も止めずに回し続ける（ホームを見ていない間も裏で最新化しておけば、
+  // 次にホームへ戻った時の表示がより新しくなるため）
+  var HOME_AUTO_REFRESH_MS = 60000;
+  function startHomeAutoRefresh_(){
+    setInterval(function(){ loadHomeSummary(true); }, HOME_AUTO_REFRESH_MS);
+  }
+
+  // 2026-10-21新設：以前は各タブを初めて開いた瞬間にそのタブのデータを読み込んでいたため、
+  // 初回クリックのたびに読み込み待ちが発生していた（ユーザー指摘：「タブを選ぶ度に
+  // 待たされるのがイライラする」）。ログイン直後、ホームの表示が終わってから裏側で
+  // 残り11タブ分を先読みしておき、実際にクリックした時には既に読み込み済みの状態に
+  // なるようにする（タブの表示自体は切り替えない。クリック時の判定「tabReady.xxxが
+  // 無ければ読み込む」はそのままなので、ここで先に埋めておけば二重に読み込まれない）
+  function prefetchOtherTabs_(){
+    shinseiLoaded = true;       tabReady.shinsei       = loadShinseiList();
+    shuseiLoaded = true;        tabReady.shusei        = loadShuuseiList();
+    dakokuLoaded = true;        tabReady.dakoku        = loadDakokuList();
+    zangyouLoaded = true;       tabReady.shuukei       = loadZangyouList();
+    yukyuLoaded = true;         tabReady.yukyu         = loadYukyuList();
+    tokubetsuLoaded = true;     tabReady.tokubetsu     = loadTokubetsuList();
+    dengonLoaded = true;        tabReady.dengon        = loadDengonList();
+    gesshuLoaded = true;        tabReady.gesshu        = loadGesshuList();
+    shuubetsuLoaded = true;     tabReady.shuubetsu     = loadShuubetsuList();
+    dakokukakuninLoaded = true; tabReady.dakokukakunin = loadDakokuKakuninList();
+    shainLoaded = true;         tabReady.shain         = loadShainList();
   }
 
   // ── 管理操作（スプレッドシートのメニュー「⚙️ 勤怠管理」と同じ処理をポータンから。
@@ -2921,6 +2968,8 @@
         tabReady.home = loadHomeSummary();
         loadFiscalYears_();
         initDeepLinkFromUrl_();
+        startHomeAutoRefresh_();
+        prefetchOtherTabs_();
         // ログイン後45分おきに先回りでトークンを裏側更新し、1時間の失効時間切れを
         // そもそも起こしにくくする（失効してしまった場合もTokenRefresh.wait()側が拾う）
         setInterval(function(){ TokenRefresh.request(); }, 45 * 60 * 1000);
