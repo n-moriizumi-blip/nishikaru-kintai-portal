@@ -653,7 +653,7 @@
 
       <div class="sheet">
         <table>
-          <thead><tr><th>ID</th><th>氏名</th><th>種別</th><th>種別・内容</th><th>対象日</th><th>事前/事後</th><th>判定</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>氏名</th><th>種別</th><th>種別・内容</th><th>対象日</th><th>事前/事後</th><th>判定</th><th>実績確認</th><th>操作</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="emptystate" id="emptystate" hidden>条件に一致する申請がありません。</div>
@@ -1363,6 +1363,17 @@
     state.id = idSel.value; state.name = nameSel.value; state.ykbn = ykbnSel.value;
   }
 
+  // 2026-10-21新設：遅刻・早退・中抜け／午前休・午後休／全休／残業の各「実績と申告のズレ」
+  // チェックが問題を検知するとRIYU（理由）へ【要確認】が追記される（コード.gs
+  // flagShinseiNeedsReview_）。Chat通知だけだと見逃すと気づけないため、一覧の行にも
+  // 常に見える形でバッジを出す（修正依頼タブの「打刻ログ反映」列と同じ考え方）
+  function buildNeedsReviewBadge_(r){
+    if (r.riyu && r.riyu.indexOf('【要確認】') !== -1) {
+      return '<span class="autobadge autobadge-warn" title="実績とのズレが検知されています。詳細はChat通知を確認してください。">要確認</span>';
+    }
+    return '<span class="autobadge autobadge-none">—</span>';
+  }
+
   function render(){
     var tbody = document.getElementById('tbody');
     var filtered = ROWS.filter(matches);
@@ -1383,6 +1394,7 @@
         '<td class="mono">' + escapeHtml(buildDateLabel(r)) + '</td>' +
         '<td>' + escapeHtml(r.jizenGo || '—') + '</td>' +
         '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
+        '<td>' + buildNeedsReviewBadge_(r) + '</td>' +
         '<td><div class="rowbtns">' + btns + '</div></td>';
       tbody.appendChild(tr);
     });
@@ -2701,11 +2713,16 @@
   function buildHomeItems_(data){
     var items = [];
     data.pending.current.concat(data.pending.prev).forEach(function(r){
+      // 2026-10-21追加：実績とのズレチェックで【要確認】が付いた行（既に承認済・仮承認）も
+      // ここに含まれるため、未承認の行と文言・ジャンプ先を区別する（承認待フィルタ付きで
+      // ジャンプすると、承認済の行は絞り込みで隠れてしまうため）
       items.push({
         category: 'approve', name: r.name,
-        detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です',
+        detail  : r.needsReview
+          ? (r.shinsei + '（対象日 ' + r.taishouDate + '）で実績とのズレが検知されています（要確認）')
+          : (r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です'),
         meta    : elapsedLabel_(r.appDateTime),
-        jump    : function(){ jumpToTab('shinsei', r.name, { status: '承認待' }); },
+        jump    : function(){ jumpToTab('shinsei', r.name, r.needsReview ? {} : { status: '承認待' }); },
       });
     });
     data.nashi.current.concat(data.nashi.prev).forEach(function(r){
