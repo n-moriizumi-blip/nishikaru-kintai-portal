@@ -312,11 +312,13 @@
   .bdseg.cat-mistake, .leg.cat-mistake .dot, .feedtag.cat-mistake, .dot.cat-mistake{background:var(--mistake);}
   .bdseg.cat-yukyu  , .leg.cat-yukyu   .dot, .feedtag.cat-yukyu, .dot.cat-yukyu{background:var(--provisional);}
   .bdseg.cat-zangyo , .leg.cat-zangyo  .dot, .feedtag.cat-zangyo, .dot.cat-zangyo{background:var(--rail-accent);}
+  .bdseg.cat-review , .leg.cat-review  .dot, .feedtag.cat-review, .dot.cat-review{background:var(--provisional);}
   .leg.cat-approve .ct{color:var(--pending);}
   .leg.cat-missing .ct{color:var(--denied);}
   .leg.cat-mistake .ct{color:var(--mistake);}
   .leg.cat-yukyu   .ct{color:var(--provisional);}
   .leg.cat-zangyo  .ct{color:var(--rail-accent);}
+  .leg.cat-review  .ct{color:var(--provisional);}
 
   /* ホームの一覧は他タブの大きな表と違い項目数が少ないため、.sheet由来のoverflow:auto；
      max-height:70vhを打ち消して内部スクロール（見づらい縦スライダー）を無くし、
@@ -2712,6 +2714,12 @@
     approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' }, bulkLabel:'申請一覧' } },
     missing: { label:'申請なし', bulk:null },
     mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' }, bulkLabel:'修正依頼' } },
+    // 2026-10-21追加：承認済だが実績とのズレが検知された申請（flagShinseiNeedsReview_の
+    // 【要確認】マーカー）。以前は「承認待ち」グループに混ぜていたが、実際には既に承認済の
+    // 申請なので「未承認でまだ何も判断していない」ものと一緒くたにするのは紛らわしいという
+    // 指摘を受け、独立したカテゴリに分離した。対象の申請一覧は承認状況がバラバラ（否認以外は
+    // 来ない）なので状況での絞り込みは使わず、個別の行クリックでそのままジャンプする
+    review: { label:'要確認', bulk:null },
   };
   // 2026-10-19追加：ユーザー指摘「修正依頼（打刻ミス）は、申請が出ている以上は承認待ちの
   // 扱いの方が自然」を受け、集計・絞り込みは「承認待ち」（申請一覧＋修正依頼の合算）と
@@ -2719,8 +2727,10 @@
   // （合算しても申請一覧由来か修正依頼由来か見分けられるように）。「まとめて確認する」は
   // グループ内の各カテゴリ分だけボタンを並べる（申請一覧・修正依頼は別タブのため、
   // 1クリックで両方を同時に開くことはできない）
+  // 2026-10-21追加：「要確認」（review）は承認待ちとは別物（既に承認済）なので独立グループに
   var HOME_GROUPS = {
     approve: { label:'承認待ち', members:['approve', 'mistake'] },
+    review:  { label:'要確認', members:['review'] },
     missing: { label:'申請なし', members:['missing'] },
   };
   var HOME_GROUP_KEYS = Object.keys(HOME_GROUPS);
@@ -2748,18 +2758,26 @@
   function buildHomeItems_(data){
     var items = [];
     data.pending.current.concat(data.pending.prev).forEach(function(r){
-      // 2026-10-21追加：実績とのズレチェックで【要確認：詳細】が付いた行（既に承認済・仮承認）も
-      // ここに含まれるため、未承認の行と文言・ジャンプ先を区別する（承認待フィルタ付きで
-      // ジャンプすると、承認済の行は絞り込みで隠れてしまうため）。詳細はriyuから取り出して表示する
-      var reviewMatch = r.needsReview && r.riyu ? r.riyu.match(/【要確認[:：]?([^】]*)】/) : null;
-      var reviewDetail = reviewMatch && reviewMatch[1].trim() ? reviewMatch[1].trim() : '実績とのズレが検知されています';
+      // 2026-10-21追加：実績とのズレチェックで【要確認：詳細】が付いた行（既に承認済・仮承認）は
+      // 「承認待ち」とは別の独立カテゴリ（review）として扱う。未承認でまだ判断していないものと、
+      // 既に承認済だが後から実績とズレが見つかったものは性質が違うため、同じ「承認待ち」に
+      // 混ぜると紛らわしいという指摘を受けて分離した（内訳バー・凡例も別区分で表示される）
+      if (r.needsReview) {
+        var reviewMatch = r.riyu ? r.riyu.match(/【要確認[:：]?([^】]*)】/) : null;
+        var reviewDetail = reviewMatch && reviewMatch[1].trim() ? reviewMatch[1].trim() : '実績とのズレが検知されています';
+        items.push({
+          category: 'review', name: r.name,
+          detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）で要確認：' + reviewDetail,
+          meta    : elapsedLabel_(r.appDateTime),
+          jump    : function(){ jumpToTab('shinsei', r.name, {}); },
+        });
+        return;
+      }
       items.push({
         category: 'approve', name: r.name,
-        detail  : r.needsReview
-          ? (r.shinsei + '（対象日 ' + r.taishouDate + '）で要確認：' + reviewDetail)
-          : (r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です'),
+        detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です',
         meta    : elapsedLabel_(r.appDateTime),
-        jump    : function(){ jumpToTab('shinsei', r.name, r.needsReview ? {} : { status: '承認待' }); },
+        jump    : function(){ jumpToTab('shinsei', r.name, { status: '承認待' }); },
       });
     });
     data.nashi.current.concat(data.nashi.prev).forEach(function(r){
