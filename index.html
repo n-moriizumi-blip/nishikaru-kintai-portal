@@ -1500,6 +1500,11 @@
       if (btn.dataset.nav === 'shuubetsu' && !shuubetsuLoaded) { shuubetsuLoaded = true; loadShuubetsuList(); }
       if (btn.dataset.nav === 'dakokukakunin' && !dakokukakuninLoaded) { dakokukakuninLoaded = true; loadDakokuKakuninList(); }
       if (btn.dataset.nav === 'shain' && !shainLoaded) { shainLoaded = true; loadShainList(); }
+      // 2026-10-21追加：ホームは他タブ（申請一覧・修正依頼等）で承認・対応した直後に戻って
+      // きても、ログイン時に読み込んだ古いデータのまま変わらなかった（ユーザー指摘：
+      // 修正依頼を4件承認したのにホームの一覧から消えない）。ホームへ移動するたびに
+      // 毎回読み込み直す（他タブのような「初回だけ読み込む」キャッシュはしない）
+      if (btn.dataset.nav === 'home') { loadHomeSummary(); }
     });
   });
 
