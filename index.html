@@ -385,9 +385,12 @@
 
   /* 修正依頼の「打刻ログ反映」列。承認済なのに自動反映できなかった行を一覧上で
      常に見えるようにする（2026-10-21新設、詳細を開かないと気づけないとの指摘） */
-  .autobadge{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; cursor:help;}
+  .autobadge{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; cursor:help;
+    font-family:inherit; border:none; -webkit-appearance:none; appearance:none;}
   .autobadge-ok{background:var(--approved); color:#fff;}
   .autobadge-warn{background:var(--mistake); color:#fff;}
+  button.autobadge-warn{cursor:pointer;}
+  button.autobadge-warn:hover{filter:brightness(1.12);}
   .autobadge-none{background:var(--field); color:var(--dim); cursor:default;}
 
   .statuspill{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; background:#fff;}
@@ -1364,14 +1367,17 @@
   }
 
   // 2026-10-21新設：遅刻・早退・中抜け／午前休・午後休／全休／残業の各「実績と申告のズレ」
-  // チェックが問題を検知するとRIYU（理由）へ【要確認】が追記される（コード.gs
+  // チェックが問題を検知するとRIYU（理由）へ【要確認：詳細】が追記される（コード.gs
   // flagShinseiNeedsReview_）。Chat通知だけだと見逃すと気づけないため、一覧の行にも
-  // 常に見える形でバッジを出す（修正依頼タブの「打刻ログ反映」列と同じ考え方）
+  // 常に見える形でバッジを出す（修正依頼タブの「打刻ログ反映」列と同じ考え方）。
+  // バッジ自体をボタンにして、確認し終えたらその場で解除できるようにする
+  // （action: clearShinseiReviewFlag。承認状況は変更しない、別軸の「確認済みフラグ」）
   function buildNeedsReviewBadge_(r){
-    if (r.riyu && r.riyu.indexOf('【要確認】') !== -1) {
-      return '<span class="autobadge autobadge-warn" title="実績とのズレが検知されています。詳細はChat通知を確認してください。">要確認</span>';
-    }
-    return '<span class="autobadge autobadge-none">—</span>';
+    var m = r.riyu && r.riyu.match(/【要確認[:：]?([^】]*)】/);
+    if (!m) return '<span class="autobadge autobadge-none">—</span>';
+    var detail = (m[1] || '').trim() || '実績とのズレが検知されています';
+    return '<button type="button" class="autobadge autobadge-warn" data-act="clearreview" data-id="' +
+      escapeHtml(r.appId) + '" title="' + escapeHtml(detail) + '（クリックで確認済みにする）">要確認</button>';
   }
 
   function render(){
@@ -1466,13 +1472,42 @@
         showToast('通信エラーが発生しました。', true);
       });
   }
+  // 2026-10-21新設：「要確認」バッジの解除（承認状況は変更しない、別軸の確認済みフラグ）
+  function doClearReview(id){
+    if (busy) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var r = ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    if (!confirm('「要確認」を解除しますか？（承認状況は変更されません）')) return;
+    busy = true;
+    setButtonsDisabled(true);
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'clearShinseiReviewFlag', token: idToken, appId: id })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        busy = false; setButtonsDisabled(false);
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast('確認済みにしました：' + r.name + '（' + id + '）');
+        loadShinseiList();
+      })
+      .catch(function(){
+        busy = false; setButtonsDisabled(false);
+        showToast('通信エラーが発生しました。', true);
+      });
+  }
   function setButtonsDisabled(disabled){
     document.querySelectorAll('.rb, .drawer-actions button').forEach(function(b){ b.disabled = disabled; });
   }
 
   document.getElementById('tbody').addEventListener('click', function(e){
     var actBtn = e.target.closest('[data-act]');
-    if (actBtn){ e.stopPropagation(); doAction(actBtn.dataset.id, actBtn.dataset.act); return; }
+    if (actBtn){
+      e.stopPropagation();
+      if (actBtn.dataset.act === 'clearreview') doClearReview(actBtn.dataset.id);
+      else doAction(actBtn.dataset.id, actBtn.dataset.act);
+      return;
+    }
     var tr = e.target.closest('tr'); if (tr) openDrawer(tr.dataset.id);
   });
   document.getElementById('d-actions').addEventListener('click', function(e){
@@ -2713,13 +2748,15 @@
   function buildHomeItems_(data){
     var items = [];
     data.pending.current.concat(data.pending.prev).forEach(function(r){
-      // 2026-10-21追加：実績とのズレチェックで【要確認】が付いた行（既に承認済・仮承認）も
+      // 2026-10-21追加：実績とのズレチェックで【要確認：詳細】が付いた行（既に承認済・仮承認）も
       // ここに含まれるため、未承認の行と文言・ジャンプ先を区別する（承認待フィルタ付きで
-      // ジャンプすると、承認済の行は絞り込みで隠れてしまうため）
+      // ジャンプすると、承認済の行は絞り込みで隠れてしまうため）。詳細はriyuから取り出して表示する
+      var reviewMatch = r.needsReview && r.riyu ? r.riyu.match(/【要確認[:：]?([^】]*)】/) : null;
+      var reviewDetail = reviewMatch && reviewMatch[1].trim() ? reviewMatch[1].trim() : '実績とのズレが検知されています';
       items.push({
         category: 'approve', name: r.name,
         detail  : r.needsReview
-          ? (r.shinsei + '（対象日 ' + r.taishouDate + '）で実績とのズレが検知されています（要確認）')
+          ? (r.shinsei + '（対象日 ' + r.taishouDate + '）で要確認：' + reviewDetail)
           : (r.shinsei + '（対象日 ' + r.taishouDate + '）が未承認です'),
         meta    : elapsedLabel_(r.appDateTime),
         jump    : function(){ jumpToTab('shinsei', r.name, r.needsReview ? {} : { status: '承認待' }); },
