@@ -651,6 +651,11 @@
             <button class="pill" aria-pressed="false" data-status="承認済">済</button>
             <button class="pill" aria-pressed="false" data-status="否認">否</button>
           </div></div>
+        <div class="f"><label>実績確認</label>
+          <div class="pills" id="f-needsreview">
+            <button class="pill" aria-pressed="true" data-val="">すべて</button>
+            <button class="pill" aria-pressed="false" data-val="1">要確認のみ</button>
+          </div></div>
         <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="refresh">再読み込み</button></div>
       </div>
 
@@ -680,6 +685,11 @@
             <button class="pill" aria-pressed="false" data-status="仮承認">仮</button>
             <button class="pill" aria-pressed="false" data-status="承認済">済</button>
             <button class="pill" aria-pressed="false" data-status="否認">否</button>
+          </div></div>
+        <div class="f"><label>打刻ログ反映</label>
+          <div class="pills" id="fs-unresolved">
+            <button class="pill" aria-pressed="true" data-val="">すべて</button>
+            <button class="pill" aria-pressed="false" data-val="1">要確認のみ</button>
           </div></div>
         <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shusei-refresh">再読み込み</button></div>
       </div>
@@ -1248,7 +1258,7 @@
     return GAS_URL + '?' + qs;
   }
   var ROWS = [];
-  var state = { id:'', name:'', ykbn:'', date:'', type:'', status:'' };
+  var state = { id:'', name:'', ykbn:'', date:'', type:'', status:'', needsReview:false };
   var currentId = null;
   var busy = false;
 
@@ -1332,8 +1342,12 @@
   // 入力/表示で形式が違う日付文字列（yyyy-MM-dd・yyyy/MM/dd）を数字だけのyyyyMMddに揃えて比較する
   function normDate(s){ return String(s || '').replace(/[^0-9]/g, ''); }
 
+  // 2026-10-21新設：実績とのズレチェックで【要確認】が付いた行だけを絞り込む
+  function hasNeedsReview_(r){ return !!(r.riyu && r.riyu.indexOf('【要確認') !== -1); }
+
   function matches(r){
     if (state.status && r.status !== state.status) return false;
+    if (state.needsReview && !hasNeedsReview_(r)) return false;
     if (state.type && categoryOf(r) !== state.type) return false;
     if (state.id && r.appId !== state.id) return false;
     if (state.name && r.name !== state.name) return false;
@@ -1419,6 +1433,11 @@
     var btn = e.target.closest('.pill'); if (!btn) return;
     document.querySelectorAll('#f-status .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
     btn.setAttribute('aria-pressed','true'); state.status = btn.dataset.status; render();
+  });
+  document.getElementById('f-needsreview').addEventListener('click', function(e){
+    var btn = e.target.closest('.pill'); if (!btn) return;
+    document.querySelectorAll('#f-needsreview .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true'); state.needsReview = !!btn.dataset.val; render();
   });
   document.getElementById('refresh').addEventListener('click', function(){ loadShinseiList(); });
 
@@ -1603,18 +1622,20 @@
   // ナビを直接クリックしてタブを開いた時に、前回ジャンプ時の絞り込みが残らないよう初期状態へ戻す
   function resetTabFilter(tab){
     if (tab === 'shinsei') {
-      state.id = ''; state.name = ''; state.ykbn = ''; state.date = ''; state.type = ''; state.status = '';
+      state.id = ''; state.name = ''; state.ykbn = ''; state.date = ''; state.type = ''; state.status = ''; state.needsReview = false;
       document.getElementById('f-id').value = '';
       document.getElementById('f-ykbn').value = '';
       document.getElementById('f-type').value = '';
       document.getElementById('f-date').value = '';
       document.querySelectorAll('#f-status .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.status === '' ? 'true' : 'false'); });
+      document.querySelectorAll('#f-needsreview .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.val === '' ? 'true' : 'false'); });
       if (ROWS.length) { populateFilterDropdowns(); render(); }
     } else if (tab === 'shusei') {
-      sState.name = ''; sState.content = ''; sState.date = ''; sState.status = '';
+      sState.name = ''; sState.content = ''; sState.date = ''; sState.status = ''; sState.unresolved = false;
       document.getElementById('fs-content').value = '';
       document.getElementById('fs-date').value = '';
       document.querySelectorAll('#fs-status .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.status === '' ? 'true' : 'false'); });
+      document.querySelectorAll('#fs-unresolved .pill').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.val === '' ? 'true' : 'false'); });
       if (SHUSEI_ROWS.length) { populateShuseiDropdown(); renderShusei(); }
     } else if (tab === 'dakoku') {
       dState.name = ''; dState.type = ''; dState.date = '';
@@ -1687,6 +1708,13 @@
           b.setAttribute('aria-pressed', b.dataset.status === opts.status ? 'true' : 'false');
         });
       }
+      // 2026-10-21新設：ホームの「要確認」カテゴリからの「まとめて確認する」用
+      if (opts.needsReviewOnly) {
+        state.needsReview = true;
+        document.querySelectorAll('#f-needsreview .pill').forEach(function(b){
+          b.setAttribute('aria-pressed', b.dataset.val === '1' ? 'true' : 'false');
+        });
+      }
       populateFilterDropdowns(); render();
     } else if (tab === 'shusei') {
       sState.name = name;
@@ -1694,6 +1722,13 @@
         sState.status = opts.status;
         document.querySelectorAll('#fs-status .pill').forEach(function(b){
           b.setAttribute('aria-pressed', b.dataset.status === opts.status ? 'true' : 'false');
+        });
+      }
+      // 2026-10-21新設：ホームの「打刻ミス（未処理）」用
+      if (opts.unresolvedOnly) {
+        sState.unresolved = true;
+        document.querySelectorAll('#fs-unresolved .pill').forEach(function(b){
+          b.setAttribute('aria-pressed', b.dataset.val === '1' ? 'true' : 'false');
         });
       }
       populateShuseiDropdown(); renderShusei();
@@ -1785,13 +1820,18 @@
 
   // ── 修正依頼（申請一覧と同じ承認/否認/差し戻しの仕組み） ──
   var SHUSEI_ROWS = [];
-  var sState = { name:'', content:'', date:'', status:'' };
+  var sState = { name:'', content:'', date:'', status:'', unresolved:false };
   var sCurrentId = null;
 
   function buildShuseiDetail(r){ return r.content + (r.addType ? '（' + r.addType + '）' : ''); }
 
+  // 2026-10-21新設：承認済にしたのに打刻ログへ自動反映できなかった（K列が未処理のまま）行
+  // だけを絞り込む（buildAutoResultBadge_と同じ判定基準）
+  function isUnresolved_(r){ return !!(r.autoResult && r.autoResult.indexOf('✅') !== 0); }
+
   function sMatches(r){
     if (sState.status && r.status !== sState.status) return false;
+    if (sState.unresolved && !isUnresolved_(r)) return false;
     if (sState.content && r.content !== sState.content) return false;
     if (sState.name && r.name !== sState.name) return false;
     if (sState.date && normDate(r.taishouDate).indexOf(normDate(sState.date)) !== 0) return false;
@@ -1812,9 +1852,8 @@
   // 気づけないとの指摘（ユーザー）を受け、一覧の行に常に見える形でバッジを出す
   function buildAutoResultBadge_(r){
     if (!r.autoResult) return '<span class="autobadge autobadge-none">—</span>';
-    var ok = r.autoResult.indexOf('✅') === 0;
-    var cls = ok ? 'autobadge-ok' : 'autobadge-warn';
-    var label = ok ? '反映済' : '要確認';
+    var cls = isUnresolved_(r) ? 'autobadge-warn' : 'autobadge-ok';
+    var label = isUnresolved_(r) ? '要確認' : '反映済';
     return '<span class="autobadge ' + cls + '" title="' + escapeHtml(r.autoResult) + '">' + label + '</span>';
   }
 
@@ -1852,6 +1891,11 @@
     var btn = e.target.closest('.pill'); if (!btn) return;
     document.querySelectorAll('#fs-status .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
     btn.setAttribute('aria-pressed','true'); sState.status = btn.dataset.status; renderShusei();
+  });
+  document.getElementById('fs-unresolved').addEventListener('click', function(e){
+    var btn = e.target.closest('.pill'); if (!btn) return;
+    document.querySelectorAll('#fs-unresolved .pill').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true'); sState.unresolved = !!btn.dataset.val; renderShusei();
   });
   document.getElementById('shusei-refresh').addEventListener('click', function(){ loadShuuseiList(); });
 
@@ -2719,7 +2763,7 @@
     // 申請なので「未承認でまだ何も判断していない」ものと一緒くたにするのは紛らわしいという
     // 指摘を受け、独立したカテゴリに分離した。対象の申請一覧は承認状況がバラバラ（否認以外は
     // 来ない）なので状況での絞り込みは使わず、個別の行クリックでそのままジャンプする
-    review: { label:'要確認', bulk:null },
+    review: { label:'要確認', bulk:{ tab:'shinsei', opts:{ needsReviewOnly:true }, bulkLabel:'申請一覧' } },
   };
   // 2026-10-19追加：ユーザー指摘「修正依頼（打刻ミス）は、申請が出ている以上は承認待ちの
   // 扱いの方が自然」を受け、集計・絞り込みは「承認待ち」（申請一覧＋修正依頼の合算）と
@@ -2769,7 +2813,7 @@
           category: 'review', name: r.name,
           detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）で要確認：' + reviewDetail,
           meta    : elapsedLabel_(r.appDateTime),
-          jump    : function(){ jumpToTab('shinsei', r.name, {}); },
+          jump    : function(){ jumpToTab('shinsei', r.name, { needsReviewOnly: true }); },
         });
         return;
       }
