@@ -383,6 +383,13 @@
   .levelbadge.l60{background:var(--denied);}
   .levelbadge.l45{background:var(--pending);}
 
+  /* 修正依頼の「打刻ログ反映」列。承認済なのに自動反映できなかった行を一覧上で
+     常に見えるようにする（2026-10-21新設、詳細を開かないと気づけないとの指摘） */
+  .autobadge{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; cursor:help;}
+  .autobadge-ok{background:var(--approved); color:#fff;}
+  .autobadge-warn{background:var(--mistake); color:#fff;}
+  .autobadge-none{background:var(--field); color:var(--dim); cursor:default;}
+
   .statuspill{font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; background:#fff;}
   .statuspill.pending{color:var(--pending); border-color:var(--pending);}
   .statuspill.provisional{color:var(--provisional); border-color:var(--provisional);}
@@ -674,7 +681,7 @@
       <p class="resultcount" id="shusei-resultcount"></p>
       <div class="sheet">
         <table>
-          <thead><tr><th>ID</th><th>氏名</th><th>内容</th><th>対象日</th><th>正しい時刻</th><th>判定</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>氏名</th><th>内容</th><th>対象日</th><th>正しい時刻</th><th>判定</th><th>打刻ログ反映</th><th>操作</th></tr></thead>
           <tbody id="shusei-tbody"></tbody>
         </table>
         <div class="emptystate" id="shusei-emptystate" hidden>条件に一致する修正依頼がありません。</div>
@@ -1751,6 +1758,17 @@
     sState.name = nameSel.value;
   }
 
+  // 2026-10-21新設：「承認済」にしたのに対象の打刻を1件に絞り込めず自動反映されなかった
+  // 行（スプレッドシートのK列「自動処理結果」が「未処理（〜）」のまま）が、詳細を開かないと
+  // 気づけないとの指摘（ユーザー）を受け、一覧の行に常に見える形でバッジを出す
+  function buildAutoResultBadge_(r){
+    if (!r.autoResult) return '<span class="autobadge autobadge-none">—</span>';
+    var ok = r.autoResult.indexOf('✅') === 0;
+    var cls = ok ? 'autobadge-ok' : 'autobadge-warn';
+    var label = ok ? '反映済' : '要確認';
+    return '<span class="autobadge ' + cls + '" title="' + escapeHtml(r.autoResult) + '">' + label + '</span>';
+  }
+
   function renderShusei(){
     var tbody = document.getElementById('shusei-tbody');
     var filtered = SHUSEI_ROWS.filter(sMatches);
@@ -1770,6 +1788,7 @@
         '<td class="mono">' + escapeHtml(r.taishouDate || '—') + '</td>' +
         '<td class="mono">' + escapeHtml(r.jissaiTime || '—') + '</td>' +
         '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
+        '<td>' + buildAutoResultBadge_(r) + '</td>' +
         '<td><div class="rowbtns">' + btns + '</div></td>';
       tbody.appendChild(tr);
     });
