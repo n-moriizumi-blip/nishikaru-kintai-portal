@@ -37,6 +37,10 @@
        --yukyu-rateは当初テール寄りの青(#2E5C8A)にしたが--provisional(#2E7A8C)と
        近すぎたため、はっきり違う紺色に変更した */
     --yukyu-low:#6B4C9A; --yukyu-rate:#2C3E6B;
+    /* 2026-10-22新設：「残業に注意が必要な社員」カードの見出し色（#8C6319、金茶色）が
+       「承認待ち」（--pending、#B8862F、同じ金系）と近く見分けづらかったため、
+       彩度・明るさとも大きく違う濃いオレンジ（鮮やかさで差を付ける）に変更した */
+    --zangyo-watch:#E8590C;
     --display:"Zen Kaku Gothic New",sans-serif; --stamp:"Zen Old Mincho",serif;
     --body:"BIZ UDGothic","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif; --mono:"JetBrains Mono",monospace;
   }
@@ -387,8 +391,10 @@
   .watchhead.cat-yukyu-rate{background:var(--yukyu-rate); color:#fff;}
   /* 2026-10-19修正：元の金色(--rail-accent)に白文字だとコントラスト不足で読みにくく、
      黒字のままだと他2つ（白文字）と見た目が揃わなかったため、同系色でより濃い金茶色に
-     変えて白文字でも読みやすくし、他の見出しと統一感を持たせた */
-  .watchhead.cat-zangyo{background:#8C6319; color:#fff;}
+     変えて白文字でも読みやすくし、他の見出しと統一感を持たせた。
+     2026-10-22再修正：その金茶色(#8C6319)が「承認待ち」(--pending、同じ金系)と
+     近すぎると指摘を受け、彩度・明るさとも大きく違う鮮やかなオレンジに変更した */
+  .watchhead.cat-zangyo{background:var(--zangyo-watch); color:#fff;}
   .watchcount{margin-left:auto; font-family:var(--mono); font-size:11.5px; font-weight:700; opacity:.85;}
   .watchrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:center; gap:12px; width:100%;
     padding:10px 16px; border-bottom:1px solid var(--field);}
