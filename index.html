@@ -1270,6 +1270,21 @@
     });
   }
 
+  // 2026-10-22新設：氏名の絞り込みドロップダウンを、五十音順ではなく社員マスタの並び順
+  // （SHAIN_ROWS、社員マスタタブ・プリフェッチで取得。サーバー側getAllShainのシート順そのまま）
+  // に揃えるための共通ヘルパー。全タブの氏名ドロップダウンで共用する。
+  // SHAIN_ROWSに無い名前（読み込み前・退職者等）はあいうえお順でフォールバックし末尾へ回す
+  function sortByShainOrder_(names){
+    var orderIndex = {};
+    SHAIN_ROWS.forEach(function(r, i){ if (!(r.name in orderIndex)) orderIndex[r.name] = i; });
+    return names.slice().sort(function(a, b){
+      var ia = orderIndex.hasOwnProperty(a) ? orderIndex[a] : Infinity;
+      var ib = orderIndex.hasOwnProperty(b) ? orderIndex[b] : Infinity;
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b, 'ja');
+    });
+  }
+
   // 雇用区分（正社員/パート）をひと目で見分けられるバッジにする（2026-10-17、ユーザー要望で追加）
   function kbnBadge_(kbn){
     if (!kbn) return '—';
@@ -1368,7 +1383,7 @@
   function populateFilterDropdowns(){
     var idSel = document.getElementById('f-id'), nameSel = document.getElementById('f-name'), ykbnSel = document.getElementById('f-ykbn');
     var ids = Array.from(new Set(ROWS.map(function(r){ return r.appId; }))).sort().reverse();
-    var names = Array.from(new Set(ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(ROWS.map(function(r){ return r.name; }))));
     var ykbns = Array.from(new Set(ROWS.map(function(r){ return r.yukyuKbn; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
 
     idSel.innerHTML = '<option value="">すべて</option>' +
@@ -1774,7 +1789,7 @@
 
   function populateDakokuDropdown(){
     var nameSel = document.getElementById('fd-name');
-    var names = Array.from(new Set(DAKOKU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(DAKOKU_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(dState.name) !== -1 ? dState.name : '';
@@ -1845,7 +1860,7 @@
 
   function populateShuseiDropdown(){
     var nameSel = document.getElementById('fs-name');
-    var names = Array.from(new Set(SHUSEI_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(SHUSEI_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(sState.name) !== -1 ? sState.name : '';
@@ -2009,7 +2024,7 @@
 
   function populateZangyouDropdown(){
     var nameSel = document.getElementById('fz-name');
-    var names = Array.from(new Set(ZANGYOU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(ZANGYOU_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(zState.name) !== -1 ? zState.name : '';
@@ -2103,7 +2118,7 @@
 
   function populateShainDropdown(){
     var nameSel = document.getElementById('fm-name');
-    var names = Array.from(new Set(SHAIN_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(SHAIN_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(mState.name) !== -1 ? mState.name : '';
@@ -2179,7 +2194,7 @@
 
   function populateYukyuDropdown(){
     var nameSel = document.getElementById('fy-name');
-    var names = Array.from(new Set(YUKYU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(YUKYU_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(yState.name) !== -1 ? yState.name : '';
@@ -2272,7 +2287,7 @@
 
   function populateTokubetsuDropdown(){
     var nameSel = document.getElementById('ft-name');
-    var names = Array.from(new Set(TOKU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(TOKU_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(tState.name) !== -1 ? tState.name : '';
@@ -2358,7 +2373,7 @@
 
   function populateDengonDropdown(){
     var nameSel = document.getElementById('fdg-name');
-    var names = Array.from(new Set(DENGON_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(DENGON_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(dgState.name) !== -1 ? dgState.name : '';
@@ -2430,7 +2445,7 @@
     var sel = document.getElementById('dc-name');
     sel.innerHTML = '<option value="">読み込み中…</option>';
     ensureShainRowsLoaded_(function(){
-      var names = SHAIN_ROWS.map(function(r){ return r.name; }).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+      var names = sortByShainOrder_(SHAIN_ROWS.map(function(r){ return r.name; }));
       sel.innerHTML = '<option value="">選択してください</option>' +
         names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     });
@@ -2508,7 +2523,7 @@
 
   function populateGesshuNameDropdown(){
     var nameSel = document.getElementById('fg-name');
-    var names = Array.from(new Set(GESSHU_ROWS.map(function(r){ return r.values[0]; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(GESSHU_ROWS.map(function(r){ return r.values[0]; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(gState.name) !== -1 ? gState.name : '';
@@ -2574,7 +2589,7 @@
 
   function populateShuubetsuNameDropdown(){
     var nameSel = document.getElementById('fw-name');
-    var names = Array.from(new Set(SHUUBETSU_ROWS.map(function(r){ return r.name; }))).sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(Array.from(new Set(SHUUBETSU_ROWS.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(wState.name) !== -1 ? wState.name : '';
@@ -2655,7 +2670,7 @@
 
   function populateDakokuKakuninNameDropdown(){
     var nameSel = document.getElementById('fk-name');
-    var names = (DAKOKU_KAKUNIN_DATA.employeeNames || []).slice().sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+    var names = sortByShainOrder_(DAKOKU_KAKUNIN_DATA.employeeNames || []);
     nameSel.innerHTML = '<option value="">全員表示</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(kState.name) !== -1 ? kState.name : '';
