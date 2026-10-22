@@ -94,21 +94,24 @@
   .stub b{display:block; font-family:var(--display); font-weight:900; font-size:15px; color:var(--ink); margin-bottom:8px;}
 
   /* ── フィルターバー ── */
-  .filterbar{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
-    display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px;}
-  .f{display:flex; flex-direction:column; gap:4px;}
+  /* 2026-10-22調整：申請一覧（8項目）が1行に収まらず2段になっていたため、各要素の
+     最低幅・余白・パディングを詰めて1行に収まりやすくした（他タブの項目数が少ない
+     フィルターバーも同じクラスを使うため、全体的に少しコンパクトな見た目になる） */
+  .filterbar{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:11px 14px;
+    display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px;}
+  .f{display:flex; flex-direction:column; gap:3px;}
   .f label{font-size:10px; font-weight:700; color:var(--dim); letter-spacing:.06em; text-transform:uppercase;
     font-family:var(--mono);}
-  .f input, .f select{background:var(--field); border:1px solid var(--line); border-radius:5px; padding:8px 10px;
-    font-size:13px; font-family:var(--body); color:var(--ink); min-width:150px;}
-  .f.grow{flex:1; min-width:200px;}
+  .f input, .f select{background:var(--field); border:1px solid var(--line); border-radius:5px; padding:7px 8px;
+    font-size:12.5px; font-family:var(--body); color:var(--ink); min-width:108px;}
+  .f.grow{flex:1; min-width:150px;}
   .f.grow input, .f.grow select{width:100%;}
-  .pills{display:flex; gap:6px; flex-wrap:wrap;}
-  .pill{font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:5px; cursor:pointer; border:1px solid var(--line);
+  .pills{display:flex; gap:5px; flex-wrap:wrap;}
+  .pill{font-size:11px; font-weight:700; padding:6px 9px; border-radius:5px; cursor:pointer; border:1px solid var(--line);
     background:var(--field); color:var(--dim); font-family:var(--mono);}
   .pill[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink);}
   .resultcount{font-size:11.5px; color:var(--dim); margin:0 0 10px 2px; font-family:var(--mono);}
-  .refreshbtn{font-family:var(--mono); font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:5px;
+  .refreshbtn{font-family:var(--mono); font-size:11px; font-weight:700; padding:6px 10px; border-radius:5px;
     border:1px solid var(--line); background:var(--field); color:var(--dim); cursor:pointer;}
 
   /* ── 検査票グリッド ── */
