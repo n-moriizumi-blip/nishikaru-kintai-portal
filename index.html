@@ -1371,7 +1371,9 @@
   function normDate(s){ return String(s || '').replace(/[^0-9]/g, ''); }
 
   // 2026-10-21新設：実績とのズレチェックで【要確認】が付いた行だけを絞り込む
-  function hasNeedsReview_(r){ return !!(r.riyu && r.riyu.indexOf('【要確認') !== -1); }
+  // 2026-10-23変更：サーバー側がRIYU列のテキストマーカーではなく専用列（needsReview）を
+  // 返すようになったため、こちらを直接見る（「データベース化」フェーズ1）
+  function hasNeedsReview_(r){ return !!r.needsReview; }
 
   function matches(r){
     if (state.status && r.status !== state.status) return false;
@@ -1417,9 +1419,8 @@
   // バッジ自体をボタンにして、確認し終えたらその場で解除できるようにする
   // （action: clearShinseiReviewFlag。承認状況は変更しない、別軸の「確認済みフラグ」）
   function buildNeedsReviewBadge_(r){
-    var m = r.riyu && r.riyu.match(/【要確認[:：]?([^】]*)】/);
-    if (!m) return '<span class="autobadge autobadge-none">—</span>';
-    var detail = (m[1] || '').trim() || '実績とのズレが検知されています';
+    if (!r.needsReview) return '<span class="autobadge autobadge-none">—</span>';
+    var detail = (r.needsReviewDetail || '').trim() || '実績とのズレが検知されています';
     return '<button type="button" class="autobadge autobadge-warn" data-act="clearreview" data-id="' +
       escapeHtml(r.appId) + '" title="' + escapeHtml(detail) + '（クリックで確認済みにする）">要確認</button>';
   }
@@ -1858,7 +1859,10 @@
   // 2026-10-21修正：ステータスを見ずに自動処理結果の文言だけで判定していたため、後から否認した
   // 行（例：SHU010〜012）も「要確認」のまま残ってしまっていた。サーバー側（portalHomeSummaryの
   // isUnresolvedApproved、コード.gs）と同じく「承認済」限定の判定に揃えた
-  function isUnresolved_(r){ return r.status === '承認済' && !!(r.autoResult && r.autoResult.indexOf('✅') !== 0); }
+  // 2026-10-23変更：サーバー側がAUTO_RESULT列の文字列判定ではなく専用列（resolved）を
+  // 返すようになったため、こちらを直接見る（「データベース化」フェーズ1）。
+  // resolvedはAUTO_RESULTが空（未処理）の行ではnullになる
+  function isUnresolved_(r){ return r.status === '承認済' && r.resolved === false; }
 
   function sMatches(r){
     if (sState.status && r.status !== sState.status) return false;
@@ -2838,8 +2842,9 @@
       // 既に承認済だが後から実績とズレが見つかったものは性質が違うため、同じ「承認待ち」に
       // 混ぜると紛らわしいという指摘を受けて分離した（内訳バー・凡例も別区分で表示される）
       if (r.needsReview) {
-        var reviewMatch = r.riyu ? r.riyu.match(/【要確認[:：]?([^】]*)】/) : null;
-        var reviewDetail = reviewMatch && reviewMatch[1].trim() ? reviewMatch[1].trim() : '実績とのズレが検知されています';
+        // 2026-10-23変更：サーバー側がRIYU列のテキストマーカーではなく専用列
+        // （needsReviewDetail）を返すようになったため、こちらを直接使う
+        var reviewDetail = (r.needsReviewDetail || '').trim() || '実績とのズレが検知されています';
         items.push({
           category: 'review', name: r.name,
           detail  : r.shinsei + '（対象日 ' + r.taishouDate + '）で要確認：' + reviewDetail,
@@ -2867,7 +2872,8 @@
     data.shusei.current.concat(data.shusei.prev).forEach(function(r){
       // 2026-10-21追加：承認済だが打刻ログへ自動反映できなかった行（r.autoResultが
       // ✅で始まらない）も対象のため、一覧の文言でそれと分かるようにする
-      var isUnresolved = r.status === '承認済' && r.autoResult && r.autoResult.indexOf('✅') !== 0;
+      // 2026-10-23変更：旧「AUTO_RESULTが✅で始まるか」の文字列判定からRESOLVED専用列へ変更
+      var isUnresolved = r.status === '承認済' && r.resolved === false;
       items.push({
         category: 'mistake', name: r.name,
         detail  : isUnresolved ? (r.content + '（承認済みだが打刻ログへ未反映：' + r.autoResult + '）') : r.content,
