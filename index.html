@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@900&family=Zen+Old+Mincho:wght@700&family=BIZ+UDGothic:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <style>
   /* ============================================================
      方向性：精密検査票の罫線グリッド（白地の紙に近い明るさ）をベースに、
@@ -256,6 +257,17 @@
     border:1px solid var(--line); border-radius:5px; padding:9px 10px; font-size:13.5px; font-family:var(--body);
     color:var(--ink); width:100%;}
   .composer-field textarea{resize:vertical; min-height:90px; line-height:1.6; font-family:var(--body);}
+  .composer-hint{font-size:11px; color:var(--dim); line-height:1.5;}
+  .composer-check label{display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:400;
+    text-transform:none; letter-spacing:0; font-family:var(--body); color:var(--ink); cursor:pointer;}
+  .composer-check input{width:auto;}
+  .composer-readonly{background:var(--panel); border:1px dashed var(--line); border-radius:5px;
+    padding:9px 10px; font-size:13.5px; font-family:var(--mono); color:var(--dim);}
+  .drag-handle{cursor:grab; color:var(--dim); font-size:15px; text-align:center; width:28px; user-select:none;}
+  .drag-handle.disabled{cursor:not-allowed; opacity:.35;}
+  tr.sortable-ghost{opacity:.35;}
+  .retiredbadge{font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:999px;
+    background:var(--denied); color:#fff; margin-left:7px; font-family:var(--mono);}
 
   /* ── ホーム ── */
   .sheetlink{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--rail);}
@@ -503,6 +515,7 @@
   body.pastyear .pastyearnote{display:block;}
   /* 過去の年度は閲覧専用：承認/否認・差し戻し・新規作成等の操作UIを隠す */
   body.pastyear .rowbtns, body.pastyear .drawer-actions, body.pastyear #dengon-new, body.pastyear #admin-ops{display:none;}
+  body.pastyear #shain-new, body.pastyear .drag-handle{display:none;}
 
   @media (max-width:720px){
     .app{flex-direction:column;}
@@ -859,11 +872,13 @@
         <div class="f"><label>雇用区分</label><select id="fm-koyou"><option value="">すべて</option>
           <option>正社員</option><option>パート</option></select></div>
         <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shain-refresh">再読み込み</button></div>
+        <div class="f"><label>&nbsp;</label><button class="newbtn" id="shain-new">＋ 新規追加</button></div>
       </div>
       <p class="resultcount" id="shain-resultcount"></p>
+      <p class="composer-hint" id="shain-draghint" style="margin:0 0 8px;">行の並び替えは左端の「⠿」をドラッグしてください（絞り込み中は並べ替えできません）。</p>
       <div class="sheet">
         <table>
-          <thead><tr><th>氏名</th><th>雇用区分</th><th>定時</th><th>入社日</th><th>勤務曜日</th><th>テスト参加</th><th>備考</th></tr></thead>
+          <thead><tr><th></th><th>氏名</th><th>雇用区分</th><th>定時</th><th>入社日</th><th>勤務曜日</th><th>テスト参加</th><th>備考</th></tr></thead>
           <tbody id="shain-tbody"></tbody>
         </table>
         <div class="emptystate" id="shain-emptystate" hidden>条件に一致する社員がいません。</div>
@@ -1113,19 +1128,24 @@
 <div class="drawer-backdrop" id="m-backdrop"></div>
 <div class="drawer" id="m-drawer" aria-hidden="true">
   <button class="drawer-close" id="m-drawer-close">← 一覧へ戻る</button>
-  <h2 id="m-name"></h2>
-  <div class="appid" id="m-furigana"></div>
-  <dl>
-    <dt>メールアドレス</dt><dd id="m-email"></dd>
-    <dt>雇用区分</dt><dd id="m-koyou"></dd>
-    <dt>定時</dt><dd id="m-teiji"></dd>
-    <dt>入社日</dt><dd id="m-nyusha"></dd>
-    <dt>勤務曜日</dt><dd id="m-workdays"></dd>
-    <dt>独自ルール対象</dt><dd id="m-dokuji"></dd>
-    <dt>テスト参加</dt><dd id="m-testsanka"></dd>
-    <dt>NFCタグID</dt><dd id="m-nfc"></dd>
-    <dt>備考</dt><dd><div class="reason" id="m-biko"></div></dd>
-  </dl>
+  <h2 id="m-drawer-title">社員情報を編集</h2>
+  <div class="composer-field"><label>メールアドレス</label><input type="email" id="m-f-email" placeholder="例：taro-y@nishikaru.co.jp"></div>
+  <div class="composer-field"><label>氏名</label><input type="text" id="m-f-name"></div>
+  <div class="composer-field"><label>フリガナ</label><input type="text" id="m-f-furigana" placeholder="カタカナ。未入力時は氏名をそのまま読み上げ"></div>
+  <div class="composer-field"><label>雇用区分</label><select id="m-f-koyou"><option value="正社員">正社員</option><option value="パート">パート</option></select></div>
+  <div class="composer-field"><label>定時開始</label><input type="text" id="m-f-teijistart" placeholder="例：8:30"></div>
+  <div class="composer-field"><label>定時終了</label><input type="text" id="m-f-teijiend" placeholder="例：17:30"></div>
+  <div class="composer-field"><label>入社日</label><input type="date" id="m-f-nyusha"></div>
+  <div class="composer-field"><label>退職日</label><input type="date" id="m-f-taishoku">
+    <span class="composer-hint">空欄＝在籍中。入力すると翌日以降、打刻漏れ系アラート等の対象から自動的に外れます。</span></div>
+  <div class="composer-field"><label>勤務曜日</label><input type="text" id="m-f-workdays" placeholder="例：水,金（空欄は毎平日勤務）"></div>
+  <div class="composer-field composer-check"><label><input type="checkbox" id="m-f-dokuji"> 独自ルール対象</label></div>
+  <div class="composer-field composer-check"><label><input type="checkbox" id="m-f-testsanka"> テスト参加</label></div>
+  <div class="composer-field"><label>本人宛Webhook URL</label><input type="text" id="m-f-webhook" placeholder="Google ChatのWebhook URL"></div>
+  <div class="composer-field"><label>NFCタグID</label><div class="composer-readonly" id="m-f-nfc">—</div>
+    <span class="composer-hint">タブレットの隠し画面「NFCタグ読み取りモード」で別途登録してください。</span></div>
+  <div class="composer-field"><label>備考</label><textarea id="m-f-biko"></textarea></div>
+  <div class="drawer-actions"><button class="go" id="m-save">保存</button></div>
 </div>
 
 <div class="drawer-backdrop" id="y-backdrop"></div>
@@ -2121,9 +2141,12 @@
       .catch(function(){ showToast('通信エラーが発生しました。', true); });
   }
 
-  // ── 社員マスタ（閲覧専用。Webhook URL等の機密情報はサーバー側で除外済み） ──
+  // ── 社員マスタ（2026-10-23、「データベース化」フェーズ1.5：ポータルから編集・新規追加・
+  //    ドラッグ＆ドロップでの並べ替えに対応。メールアドレス〈主キー・新規時のみ入力可〉と
+  //    NFCタグID〈物理タグ読み取り専用・既存のNFCタグ読み取りモードで別途登録〉は対象外） ──
   var SHAIN_ROWS = [];
   var mState = { name:'', koyou:'' };
+  var shainSortable = null;
 
   function mMatches(r){
     if (mState.koyou && r.koyouKbn !== mState.koyou) return false;
@@ -2140,15 +2163,23 @@
     mState.name = nameSel.value;
   }
 
+  // 並べ替え（ドラッグ＆ドロップ）はSHAIN_ROWS全体の順序を変える操作のため、
+  // 絞り込み中（部分集合しか表示していない時）は曖昧になるので無効化する
+  function shainReorderAllowed_(){
+    return !mState.name && !mState.koyou && !isPastYearView;
+  }
+
   function renderShain(){
     var tbody = document.getElementById('shain-tbody');
     var filtered = SHAIN_ROWS.filter(mMatches);
+    var reorderable = shainReorderAllowed_();
     tbody.innerHTML = '';
     filtered.forEach(function(r){
       var tr = document.createElement('tr');
       tr.dataset.email = r.email;
       tr.innerHTML =
-        '<td class="name">' + escapeHtml(r.name) + '</td>' +
+        '<td class="drag-handle' + (reorderable ? '' : ' disabled') + '">⠿</td>' +
+        '<td class="name">' + escapeHtml(r.name) + (r.retirementDate ? '<span class="retiredbadge">退職</span>' : '') + '</td>' +
         '<td>' + kbnBadge_(r.koyouKbn) + '</td>' +
         '<td class="mono">' + escapeHtml(r.teijiStart || '—') + '〜' + escapeHtml(r.teijiEnd || '—') + '</td>' +
         '<td class="mono">' + escapeHtml(r.nyushaDate || '—') + '</td>' +
@@ -2159,33 +2190,124 @@
     });
     document.getElementById('shain-emptystate').hidden = filtered.length > 0;
     document.getElementById('shain-resultcount').textContent = filtered.length + ' 名（全' + SHAIN_ROWS.length + '名中）';
+    document.getElementById('shain-draghint').hidden = isPastYearView;
+
+    if (shainSortable) { shainSortable.destroy(); shainSortable = null; }
+    if (window.Sortable) {
+      shainSortable = Sortable.create(tbody, {
+        handle: '.drag-handle',
+        animation: 150,
+        disabled: !reorderable,
+        onEnd: function(){
+          if (!reorderable) return;
+          var emails = Array.prototype.map.call(tbody.children, function(tr){ return tr.dataset.email; });
+          saveShainOrder_(emails);
+        }
+      });
+    }
+  }
+
+  function saveShainOrder_(emails){
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reorderShainMaster', token: idToken, emails: emails })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) { showToast(data.message || '並べ替えの保存に失敗しました。', true); loadShainList(); return; }
+        // ローカルのSHAIN_ROWSも新しい順序に合わせておく（氏名ドロップダウンの並び順等に使われるため）
+        var byEmail = {}; SHAIN_ROWS.forEach(function(r){ byEmail[r.email] = r; });
+        SHAIN_ROWS = emails.map(function(em){ return byEmail[em]; }).filter(Boolean);
+        showToast('並び順を保存しました。');
+      })
+      .catch(function(){ showToast('通信エラーが発生しました。', true); loadShainList(); });
   }
 
   document.getElementById('fm-name').addEventListener('change', function(e){ mState.name = e.target.value; renderShain(); });
   document.getElementById('fm-koyou').addEventListener('change', function(e){ mState.koyou = e.target.value; renderShain(); });
   document.getElementById('shain-refresh').addEventListener('click', function(){ loadShainList(); });
 
+  // "yyyy/MM/dd" ⇔ <input type="date">の"yyyy-MM-dd"相互変換
+  function toInputDate_(s){ return s ? s.replace(/\//g, '-') : ''; }
+
   var mDrawer = document.getElementById('m-drawer'), mBackdrop = document.getElementById('m-backdrop');
+  var mEditingEmail = null; // null＝新規追加モード、それ以外＝編集対象のメールアドレス
+  function fillShainForm_(r){
+    document.getElementById('m-f-email').value = r ? r.email : '';
+    document.getElementById('m-f-email').disabled = !!r; // 既存社員は主キーのため変更不可
+    document.getElementById('m-f-name').value = r ? r.name : '';
+    document.getElementById('m-f-furigana').value = r ? (r.furigana || '') : '';
+    document.getElementById('m-f-koyou').value = r ? (r.koyouKbn || '正社員') : '正社員';
+    document.getElementById('m-f-teijistart').value = r ? (r.teijiStart || '') : '';
+    document.getElementById('m-f-teijiend').value = r ? (r.teijiEnd || '') : '';
+    document.getElementById('m-f-nyusha').value = r ? toInputDate_(r.nyushaDate) : '';
+    document.getElementById('m-f-taishoku').value = r ? toInputDate_(r.retirementDate) : '';
+    document.getElementById('m-f-workdays').value = r ? (r.workDays || '') : '';
+    document.getElementById('m-f-dokuji').checked = r ? !!r.isDokujirule : false;
+    document.getElementById('m-f-testsanka').checked = r ? !!r.isTestSanka : false;
+    document.getElementById('m-f-webhook').value = r ? (r.webhook || '') : '';
+    document.getElementById('m-f-nfc').textContent = r && r.nfcId ? r.nfcId : '（未登録）';
+    document.getElementById('m-f-biko').value = r ? (r.biko || '') : '';
+  }
   function openShainDrawer(email){
     var r = SHAIN_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
-    document.getElementById('m-name').textContent = r.name;
-    document.getElementById('m-furigana').textContent = r.furigana || '—';
-    document.getElementById('m-email').textContent = r.email;
-    document.getElementById('m-koyou').innerHTML = kbnBadge_(r.koyouKbn);
-    document.getElementById('m-teiji').textContent = (r.teijiStart || '—') + '〜' + (r.teijiEnd || '—');
-    document.getElementById('m-nyusha').textContent = r.nyushaDate || '—';
-    document.getElementById('m-workdays').textContent = r.workDays || '毎平日';
-    document.getElementById('m-dokuji').textContent = r.isDokujirule ? '対象' : '対象外';
-    document.getElementById('m-testsanka').textContent = r.isTestSanka ? '対象' : '対象外';
-    document.getElementById('m-nfc').textContent = r.nfcId || '—';
-    document.getElementById('m-biko').textContent = r.biko || '（記入なし）';
+    mEditingEmail = email;
+    document.getElementById('m-drawer-title').textContent = r.name + 'さんの情報を編集';
+    fillShainForm_(r);
+    mDrawer.classList.add('open'); mDrawer.setAttribute('aria-hidden','false'); mBackdrop.classList.add('open');
+  }
+  function openShainComposer(){
+    mEditingEmail = null;
+    document.getElementById('m-drawer-title').textContent = '社員を新規追加';
+    fillShainForm_(null);
     mDrawer.classList.add('open'); mDrawer.setAttribute('aria-hidden','false'); mBackdrop.classList.add('open');
   }
   function closeShainDrawer(){ mDrawer.classList.remove('open'); mDrawer.setAttribute('aria-hidden','true'); mBackdrop.classList.remove('open'); }
   document.getElementById('m-drawer-close').addEventListener('click', closeShainDrawer);
   mBackdrop.addEventListener('click', closeShainDrawer);
   document.getElementById('shain-tbody').addEventListener('click', function(e){
+    if (e.target.closest('.drag-handle')) return; // ドラッグハンドルのクリックでは開かない
     var tr = e.target.closest('tr'); if (tr) openShainDrawer(tr.dataset.email);
+  });
+  document.getElementById('shain-new').addEventListener('click', openShainComposer);
+
+  var mSaving = false;
+  document.getElementById('m-save').addEventListener('click', function(){
+    if (mSaving) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var email = document.getElementById('m-f-email').value.trim();
+    var name  = document.getElementById('m-f-name').value.trim();
+    if (!email || email.indexOf('@') === -1) { showToast('メールアドレスの形式が正しくありません。', true); return; }
+    if (!name) { showToast('氏名は必須です。', true); return; }
+    var payload = {
+      action: mEditingEmail ? 'updateShainMaster' : 'createShainMaster',
+      token: idToken,
+      email: email,
+      name: name,
+      furigana: document.getElementById('m-f-furigana').value.trim(),
+      koyouKbn: document.getElementById('m-f-koyou').value,
+      teijiStart: document.getElementById('m-f-teijistart').value.trim(),
+      teijiEnd: document.getElementById('m-f-teijiend').value.trim(),
+      nyushaDate: document.getElementById('m-f-nyusha').value,
+      retirementDate: document.getElementById('m-f-taishoku').value,
+      workDays: document.getElementById('m-f-workdays').value.trim(),
+      isDokujirule: document.getElementById('m-f-dokuji').checked,
+      isTestSanka: document.getElementById('m-f-testsanka').checked,
+      webhook: document.getElementById('m-f-webhook').value.trim(),
+      biko: document.getElementById('m-f-biko').value.trim(),
+    };
+    mSaving = true;
+    var btn = document.getElementById('m-save'); btn.disabled = true;
+    fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        mSaving = false; btn.disabled = false;
+        if (!data.success) { showToast(data.message || '保存に失敗しました。', true); return; }
+        showToast((mEditingEmail ? '更新しました：' : '追加しました：') + name);
+        closeShainDrawer();
+        loadShainList();
+      })
+      .catch(function(){ mSaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
   function loadShainList(){
