@@ -877,7 +877,7 @@
         <div class="f"><label>&nbsp;</label><button class="newbtn" id="shain-new">＋ 新規追加</button></div>
       </div>
       <p class="resultcount" id="shain-resultcount"></p>
-      <p class="composer-hint" id="shain-draghint" style="margin:0 0 8px;">行の並び替えは左端の「⠿」をドラッグしてください（絞り込み中・退職者を隠している間は並べ替えできません）。</p>
+      <p class="composer-hint" id="shain-draghint" style="margin:0 0 8px;">行の並び替えは左端の「⠿」をドラッグしてください（氏名・雇用区分で絞り込み中は並べ替えできません）。</p>
       <div class="sheet">
         <table>
           <thead><tr><th></th><th>氏名</th><th>雇用区分</th><th>定時</th><th>入社日</th><th>勤務曜日</th><th>テスト参加</th><th>備考</th></tr></thead>
@@ -2151,7 +2151,7 @@
   var shainSortable = null;
 
   function mMatches(r){
-    if (!mState.showRetired && r.retirementDate) return false;
+    if (!!r.retirementDate !== mState.showRetired) return false; // showRetired=falseなら在籍中のみ、trueなら退職者のみ
     if (mState.koyou && r.koyouKbn !== mState.koyou) return false;
     if (mState.name && r.name !== mState.name) return false;
     return true;
@@ -2159,7 +2159,8 @@
 
   function populateShainDropdown(){
     var nameSel = document.getElementById('fm-name');
-    var names = sortByShainOrder_(Array.from(new Set(SHAIN_ROWS.map(function(r){ return r.name; }))));
+    var pool = SHAIN_ROWS.filter(function(r){ return !!r.retirementDate === mState.showRetired; });
+    var names = sortByShainOrder_(Array.from(new Set(pool.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
     nameSel.value = names.indexOf(mState.name) !== -1 ? mState.name : '';
@@ -2169,7 +2170,7 @@
   // 並べ替え（ドラッグ＆ドロップ）はSHAIN_ROWS全体の順序を変える操作のため、
   // 絞り込み中（部分集合しか表示していない時）は曖昧になるので無効化する
   function shainReorderAllowed_(){
-    return !mState.name && !mState.koyou && mState.showRetired && !isPastYearView;
+    return !mState.name && !mState.koyou && !isPastYearView;
   }
 
   function renderShain(){
@@ -2218,10 +2219,10 @@
       .then(function(res){ return res.json(); })
       .then(function(data){
         if (!data.success) { showToast(data.message || '並べ替えの保存に失敗しました。', true); loadShainList(); return; }
-        // ローカルのSHAIN_ROWSも新しい順序に合わせておく（氏名ドロップダウンの並び順等に使われるため）
-        var byEmail = {}; SHAIN_ROWS.forEach(function(r){ byEmail[r.email] = r; });
-        SHAIN_ROWS = emails.map(function(em){ return byEmail[em]; }).filter(Boolean);
         showToast('並び順を保存しました。');
+        // emailsは今表示中の絞り込み対象だけなので（例：在籍中のみ）、全社員分の正しい並びに
+        // 更新するため読み込み直す（氏名ドロップダウン・伝言板等の並び順にも使われるため）
+        loadShainList();
       })
       .catch(function(){ showToast('通信エラーが発生しました。', true); loadShainList(); });
   }
@@ -2231,8 +2232,10 @@
   document.getElementById('shain-refresh').addEventListener('click', function(){ loadShainList(); });
   document.getElementById('shain-toggleretired').addEventListener('click', function(){
     mState.showRetired = !mState.showRetired;
-    this.textContent = mState.showRetired ? '退職者を隠す' : '退職者を表示';
+    this.textContent = mState.showRetired ? '在籍中を表示' : '退職者を表示';
     this.classList.toggle('toggle-on', mState.showRetired);
+    mState.name = ''; // 在籍中⇄退職者の切替で、別カテゴリの氏名が選択されたままにならないようリセット
+    populateShainDropdown();
     renderShain();
   });
 
