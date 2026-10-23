@@ -1156,16 +1156,22 @@
   <h2 id="y-name"></h2>
   <div class="appid" id="y-kinzoku"></div>
   <dl>
-    <dt>今年度付与日数</dt><dd id="y-fuyo"></dd>
     <dt>前年度付与日数</dt><dd id="y-fuyozen"></dd>
     <dt>前年繰越</dt><dd id="y-kurikoshi"></dd>
     <dt>消化済み日数</dt><dd id="y-shoka"></dd>
-    <dt>通常有給残日数</dt><dd id="y-zanzan"></dd>
-    <dt>積立有給繰越残</dt><dd id="y-tkurikoshi"></dd>
     <dt>今年度積立移行</dt><dd id="y-tido"></dd>
     <dt>積立有給消化日数</dt><dd id="y-tshoka"></dd>
     <dt>積立有給残日数</dt><dd id="y-tzan"></dd>
   </dl>
+  <!-- 2026-10-24新設：この3項目だけ、新規社員追加直後に総務が手入力する必要がある
+       （フェーズ1.5の続き）。それ以外はGASが自動計算するためこのまま閲覧専用 -->
+  <div class="composer-field"><label>今年度付与日数</label><input type="number" step="0.5" id="y-f-fuyo">
+    <span class="composer-hint">新入社員は、入社から半年後など初回付与のタイミングで総務が入力してください（このシステムは年1回〈11/21〉の年次更新以外に自動付与はしません）。</span></div>
+  <div class="composer-field"><label>通常有給残日数</label><input type="number" step="0.125" id="y-f-zanzan">
+    <span class="composer-hint">新規社員追加時は0スタートのため、現時点の正しい残日数を入力してください。入力後はGASが自動更新します。</span></div>
+  <div class="composer-field"><label>積立有給繰越残</label><input type="number" step="0.5" id="y-f-tkurikoshi">
+    <span class="composer-hint">積立有給が無ければ0のままで構いません。</span></div>
+  <div class="drawer-actions"><button class="go" id="y-save">保存</button></div>
 </div>
 
 <div class="drawer-backdrop" id="t-backdrop"></div>
@@ -2385,19 +2391,21 @@
   document.getElementById('yukyu-refresh').addEventListener('click', function(){ loadYukyuList(); });
 
   var yDrawer = document.getElementById('y-drawer'), yBackdrop = document.getElementById('y-backdrop');
+  var yEditingEmail = null;
   function openYukyuDrawer(email){
     var r = YUKYU_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
+    yEditingEmail = email;
     document.getElementById('y-name').textContent = r.name;
     document.getElementById('y-kinzoku').textContent = '勤続' + (r.kinzokuNen || '—');
-    document.getElementById('y-fuyo').textContent = fmtDay_(r.fuyoNissu);
     document.getElementById('y-fuyozen').textContent = fmtDay_(r.fuyoZennen);
     document.getElementById('y-kurikoshi').textContent = fmtDay_(r.kurikoshi);
     document.getElementById('y-shoka').textContent = fmtDay_(r.shokaNissu);
-    document.getElementById('y-zanzan').textContent = fmtDay_(r.zanzanNissu);
-    document.getElementById('y-tkurikoshi').textContent = fmtDay_(r.tsumitateKurikoshi);
     document.getElementById('y-tido').textContent = fmtDay_(r.tsumitateIdo);
     document.getElementById('y-tshoka').textContent = fmtDay_(r.tsumitateShoka);
     document.getElementById('y-tzan').textContent = fmtDay_(r.tsumitateZan);
+    document.getElementById('y-f-fuyo').value = r.fuyoNissu || 0;
+    document.getElementById('y-f-zanzan').value = r.zanzanNissu || 0;
+    document.getElementById('y-f-tkurikoshi').value = r.tsumitateKurikoshi || 0;
     yDrawer.classList.add('open'); yDrawer.setAttribute('aria-hidden','false'); yBackdrop.classList.add('open');
   }
   function closeYukyuDrawer(){ yDrawer.classList.remove('open'); yDrawer.setAttribute('aria-hidden','true'); yBackdrop.classList.remove('open'); }
@@ -2405,6 +2413,36 @@
   yBackdrop.addEventListener('click', closeYukyuDrawer);
   document.getElementById('yukyu-tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (tr) openYukyuDrawer(tr.dataset.email);
+  });
+
+  var ySaving = false;
+  document.getElementById('y-save').addEventListener('click', function(){
+    if (ySaving) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var fuyoNissu = document.getElementById('y-f-fuyo').value;
+    var zanzanNissu = document.getElementById('y-f-zanzan').value;
+    var tsumitateKurikoshi = document.getElementById('y-f-tkurikoshi').value;
+    if (fuyoNissu === '' || zanzanNissu === '' || tsumitateKurikoshi === '') {
+      showToast('数値を入力してください。', true); return;
+    }
+    ySaving = true;
+    var btn = document.getElementById('y-save'); btn.disabled = true;
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'updateYukyuKanriValues', token: idToken, email: yEditingEmail,
+        fuyoNissu: fuyoNissu, zanzanNissu: zanzanNissu, tsumitateKurikoshi: tsumitateKurikoshi
+      })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        ySaving = false; btn.disabled = false;
+        if (!data.success) { showToast(data.message || '保存に失敗しました。', true); return; }
+        showToast('有給管理を更新しました。');
+        closeYukyuDrawer();
+        loadYukyuList();
+      })
+      .catch(function(){ ySaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
   function loadYukyuList(){
