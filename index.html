@@ -117,6 +117,7 @@
   .resultcount{font-size:11.5px; color:var(--dim); margin:0 0 10px 2px; font-family:var(--mono);}
   .refreshbtn{font-family:var(--mono); font-size:11px; font-weight:700; padding:6px 10px; border-radius:5px;
     border:1px solid var(--line); background:var(--field); color:var(--dim); cursor:pointer;}
+  .refreshbtn.toggle-on{background:var(--rail); border-color:var(--rail); color:var(--rail-ink);}
 
   /* ── 検査票グリッド ── */
   .sheet{background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:auto; max-height:70vh;}
@@ -871,11 +872,12 @@
         <div class="f grow"><label>氏名</label><select id="fm-name"><option value="">すべて</option></select></div>
         <div class="f"><label>雇用区分</label><select id="fm-koyou"><option value="">すべて</option>
           <option>正社員</option><option>パート</option></select></div>
+        <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shain-toggleretired">退職者を表示</button></div>
         <div class="f"><label>&nbsp;</label><button class="refreshbtn" id="shain-refresh">再読み込み</button></div>
         <div class="f"><label>&nbsp;</label><button class="newbtn" id="shain-new">＋ 新規追加</button></div>
       </div>
       <p class="resultcount" id="shain-resultcount"></p>
-      <p class="composer-hint" id="shain-draghint" style="margin:0 0 8px;">行の並び替えは左端の「⠿」をドラッグしてください（絞り込み中は並べ替えできません）。</p>
+      <p class="composer-hint" id="shain-draghint" style="margin:0 0 8px;">行の並び替えは左端の「⠿」をドラッグしてください（絞り込み中・退職者を隠している間は並べ替えできません）。</p>
       <div class="sheet">
         <table>
           <thead><tr><th></th><th>氏名</th><th>雇用区分</th><th>定時</th><th>入社日</th><th>勤務曜日</th><th>テスト参加</th><th>備考</th></tr></thead>
@@ -2145,10 +2147,11 @@
   //    ドラッグ＆ドロップでの並べ替えに対応。メールアドレス〈主キー・新規時のみ入力可〉と
   //    NFCタグID〈物理タグ読み取り専用・既存のNFCタグ読み取りモードで別途登録〉は対象外） ──
   var SHAIN_ROWS = [];
-  var mState = { name:'', koyou:'' };
+  var mState = { name:'', koyou:'', showRetired:false };
   var shainSortable = null;
 
   function mMatches(r){
+    if (!mState.showRetired && r.retirementDate) return false;
     if (mState.koyou && r.koyouKbn !== mState.koyou) return false;
     if (mState.name && r.name !== mState.name) return false;
     return true;
@@ -2166,7 +2169,7 @@
   // 並べ替え（ドラッグ＆ドロップ）はSHAIN_ROWS全体の順序を変える操作のため、
   // 絞り込み中（部分集合しか表示していない時）は曖昧になるので無効化する
   function shainReorderAllowed_(){
-    return !mState.name && !mState.koyou && !isPastYearView;
+    return !mState.name && !mState.koyou && mState.showRetired && !isPastYearView;
   }
 
   function renderShain(){
@@ -2226,6 +2229,12 @@
   document.getElementById('fm-name').addEventListener('change', function(e){ mState.name = e.target.value; renderShain(); });
   document.getElementById('fm-koyou').addEventListener('change', function(e){ mState.koyou = e.target.value; renderShain(); });
   document.getElementById('shain-refresh').addEventListener('click', function(){ loadShainList(); });
+  document.getElementById('shain-toggleretired').addEventListener('click', function(){
+    mState.showRetired = !mState.showRetired;
+    this.textContent = mState.showRetired ? '退職者を隠す' : '退職者を表示';
+    this.classList.toggle('toggle-on', mState.showRetired);
+    renderShain();
+  });
 
   // "yyyy/MM/dd" ⇔ <input type="date">の"yyyy-MM-dd"相互変換
   function toInputDate_(s){ return s ? s.replace(/\//g, '-') : ''; }
