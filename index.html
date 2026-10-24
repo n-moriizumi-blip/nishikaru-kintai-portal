@@ -137,12 +137,24 @@
   /* 備考・メッセージ内容・詳細等、長くなりがちな自由記述列だけ左詰め（ユーザー指示：
      「基本的には中央揃え、左詰めの方が見やすいものだけ左詰め」） */
   td.txtleft, th.txtleft{text-align:left;}
-  /* ── 打刻確認：日付・曜日列を横スクロールでも固定表示（leftはJSで実測して設定） ── */
-  .dk-col0{position:sticky; z-index:1; border-right:1.5px solid #999999;}
+  /* ── 打刻確認：日付・曜日列を横スクロールでも固定表示 ──
+     2026-10-24変更：leftの値はJSでoffsetWidthを実測して設定していたが、2段ヘッダーの
+     縦位置（top、下記参照）と同様にcolgroupの固定幅（64px/62px、下のJSで設定）と
+     常に一致するため、値をCSS側に直接ハードコードしズレの起きようがない形にした */
+  .dk-col0{position:sticky; left:0; z-index:1; border-right:1.5px solid #999999;}
   /* 曜日列と最初の社員（小田川さん）の間が日付固定列の境目で、他の区切りより見分けづらい
      という指摘から、ここだけ太く濃い線にして固定列の切れ目を強調する */
-  .dk-col1{position:sticky; z-index:1; border-right:3px solid #16293A;}
-  .dk-corner{position:sticky; z-index:4; border-right:3px solid #16293A;}
+  .dk-col1{position:sticky; left:64px; z-index:1; border-right:3px solid #16293A;}
+  .dk-corner{position:sticky; left:0; z-index:4; border-right:3px solid #16293A;}
+  /* 2026-10-24新設：打刻確認・週別実働は見出しが2段（社員名/週ラベル行＋出勤退勤備考等の
+     行）で、2段目のsticky位置（top）を以前はJSでoffsetHeightを実測して設定していた。
+     しかしWebフォント（JetBrains Mono等）の読み込みタイミングによっては、まだフォールバック
+     フォントで計測した結果が後から変わり、2段目が1段目と同じ位置に重なって1段目（社員名）が
+     隠れて見えなくなる不具合が起きていた（ユーザー指摘：「下にスクロールすると氏名まで
+     スクロールして見えなくなってしまう」）。高さ・位置を固定値にしてJS測定自体を無くした */
+  #dakokukakunin-thead th, #shuubetsu-thead th{height:34px; box-sizing:border-box;}
+  #dakokukakunin-thead th[rowspan], #shuubetsu-thead th[rowspan]{height:68px;}
+  #dakokukakunin-thead tr:nth-child(2) th, #shuubetsu-thead tr:nth-child(2) th{top:34px;}
   /* 社員ごとの3列ブロックの境目を太めの縦線で区切る（実シートと同じ#666666。
      ユーザー指摘：「打刻確認がなんか見づらい」への対応） */
   .emp-end{border-right:2px solid #666666;}
@@ -2882,11 +2894,9 @@
       '<tr>' + SHUUBETSU_WEEKS.map(function(w){
         return w.sub.map(function(s){ return '<th>' + escapeHtml(s).replace(/\n/g, '<br>') + '</th>'; }).join('');
       }).join('') + '</tr>';
-    // 2段ヘッダーなので、1段目の実際の高さ分だけ2段目のsticky位置をずらす
-    if (thead.rows.length === 2) {
-      var row1Height = thead.rows[0].offsetHeight;
-      Array.from(thead.rows[1].cells).forEach(function(th){ th.style.top = row1Height + 'px'; });
-    }
+    // 2026-10-24変更：2段目のtop位置はCSS（#shuubetsu-thead tr:nth-child(2) th）で
+    // 固定値を指定するようにしたため、ここでのJS測定・設定は不要になった（打刻確認タブと
+    // 同じ修正。Webフォント読み込みタイミングでズレて1段目〈氏名〉が隠れる不具合があった）
 
     var tbody = document.getElementById('shuubetsu-tbody');
     var filtered = SHUUBETSU_ROWS.filter(wMatches);
@@ -2975,10 +2985,8 @@
       '</tr><tr>' +
         empIdxs.map(function(){ return '<th>出勤</th><th>退勤</th><th class="emp-end">備考</th>'; }).join('') +
       '</tr>';
-    if (thead.rows.length === 2) {
-      var h = thead.rows[0].offsetHeight;
-      Array.from(thead.rows[1].cells).forEach(function(th){ th.style.top = h + 'px'; });
-    }
+    // 2026-10-24変更：2段目のtop位置はCSS（#dakokukakunin-thead tr:nth-child(2) th）で
+    // 固定値を指定するようにしたため、ここでのJS測定・設定は不要になった
 
     var tbody = document.getElementById('dakokukakunin-tbody');
     tbody.innerHTML = '';
@@ -3001,19 +3009,9 @@
     document.getElementById('dakokukakunin-emptystate').hidden = (data.days || []).length > 0;
     document.getElementById('dakokukakunin-resultcount').textContent =
       (data.days || []).length + ' 日分（' + (pickedIdx !== -1 ? '1名表示中' : '全' + allNames.length + '名') + '）';
-
-    // 日付・曜日列（A・B列相当）を横スクロールでも追従するよう固定する
-    // （実際のシートもsetFrozenColumns(2)で固定している。2026-10-17ユーザー要望）
-    var firstTr = tbody.rows[0];
-    if (firstTr) {
-      var col0Width = firstTr.cells[0].offsetWidth;
-      Array.from(tbody.rows).forEach(function(r){
-        r.cells[0].style.left = '0px';
-        r.cells[1].style.left = col0Width + 'px';
-      });
-      var cornerTh = thead.rows[0].cells[0];
-      cornerTh.style.left = '0px';
-    }
+    // 2026-10-24変更：日付・曜日列（A・B列相当）の横スクロール追従は、CSS側（.dk-col0/
+    // .dk-col1/.dk-corner、colgroupの固定幅64px/62pxと一致する値をハードコード）で
+    // 確定するようにしたため、ここでのJS測定・設定は不要になった
   }
 
   document.getElementById('fk-name').addEventListener('change', function(e){ kState.name = e.target.value; renderDakokuKakuninTable(); });
