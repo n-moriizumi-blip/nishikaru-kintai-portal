@@ -937,7 +937,7 @@
                 <tr><td>🕒 打刻ログ</td><td class="txtleft">全社員の生の打刻記録（出勤・退勤・外出・帰社）を検索する</td><td>閲覧専用</td></tr>
                 <tr><td>📊 36協定</td><td class="txtleft">年間残業累計・36協定の残り・複数月平均などを社員ごとに確認する</td><td>閲覧専用</td></tr>
                 <tr><td>🏖️ 有給管理</td><td class="txtleft">通常有給・積立有給の残日数・消化日数を確認する。新規社員追加直後は今年度付与日数・通常有給残日数・積立有給繰越残の3項目だけ手入力できる</td><td>閲覧＋一部編集</td></tr>
-                <tr><td>🎌 特別休暇管理</td><td class="txtleft">慶弔・傷病等特別休暇・積立有給の申請ごとの消化状況を確認する</td><td>閲覧専用</td></tr>
+                <tr><td>🎌 特別休暇管理</td><td class="txtleft">慶弔・傷病等特別休暇・積立有給の申請ごとの消化状況を確認する。備考欄は編集できる</td><td>閲覧＋一部編集</td></tr>
                 <tr><td>💬 伝言板</td><td class="txtleft">社員への伝言を確認する</td><td>閲覧＋新規作成</td></tr>
                 <tr><td>📅 月次集計</td><td class="txtleft">月ごとの出勤時間・残業・有給消化等の集計表。「給与じまん入力完了」はクリックで切り替え可能</td><td>閲覧＋一部編集</td></tr>
                 <tr><td>📆 週別実働</td><td class="txtleft">週ごとの実働時間・残業・40h残り等を確認する</td><td>閲覧専用</td></tr>
@@ -1194,8 +1194,12 @@
     <dt>残日数</dt><dd id="t-zan"></dd>
     <dt>使用期限</dt><dd id="t-kigen"></dd>
     <dt>状況</dt><dd id="t-chouka"></dd>
-    <dt>備考</dt><dd><div class="reason" id="t-biko"></div></dd>
   </dl>
+  <!-- 2026-10-24新設：M列（備考）は総務がスプレッドシートへ直接手書きする自由記入欄
+       だったが、ポータルからも編集できるようにした（給与じまん入力完了と同様、
+       閲覧専用タブに唯一残っていた手入力欄） -->
+  <div class="composer-field"><label>備考</label><textarea id="t-f-biko"></textarea></div>
+  <div class="drawer-actions"><button class="go" id="t-save">保存</button></div>
 </div>
 
 <div class="drawer-backdrop" id="dd-backdrop"></div>
@@ -2515,8 +2519,10 @@
   document.getElementById('tokubetsu-refresh').addEventListener('click', function(){ loadTokubetsuList(); });
 
   var tDrawer = document.getElementById('t-drawer'), tBackdrop = document.getElementById('t-backdrop');
+  var tEditingAppId = null;
   function openTokubetsuDrawer(id){
     var r = TOKU_ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    tEditingAppId = id;
     document.getElementById('t-name').textContent = r.name;
     document.getElementById('t-appid').textContent = id;
     document.getElementById('t-appdt').textContent = r.appDateTime || '—';
@@ -2528,7 +2534,7 @@
     document.getElementById('t-zan').textContent = fmtDay_(r.zanNissu);
     document.getElementById('t-kigen').textContent = r.kigen || '—';
     document.getElementById('t-chouka').innerHTML = r.chouka ? '<span class="choukabadge">' + escapeHtml(r.chouka) + '</span>' : '—';
-    document.getElementById('t-biko').textContent = r.biko || '（記入なし）';
+    document.getElementById('t-f-biko').value = r.biko || '';
     tDrawer.classList.add('open'); tDrawer.setAttribute('aria-hidden','false'); tBackdrop.classList.add('open');
   }
   function closeTokubetsuDrawer(){ tDrawer.classList.remove('open'); tDrawer.setAttribute('aria-hidden','true'); tBackdrop.classList.remove('open'); }
@@ -2536,6 +2542,28 @@
   tBackdrop.addEventListener('click', closeTokubetsuDrawer);
   document.getElementById('tokubetsu-tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (tr) openTokubetsuDrawer(tr.dataset.id);
+  });
+
+  var tSaving = false;
+  document.getElementById('t-save').addEventListener('click', function(){
+    if (tSaving) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var biko = document.getElementById('t-f-biko').value;
+    tSaving = true;
+    var btn = document.getElementById('t-save'); btn.disabled = true;
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateTokubetsuBiko', token: idToken, appId: tEditingAppId, biko: biko })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        tSaving = false; btn.disabled = false;
+        if (!data.success) { showToast(data.message || '保存に失敗しました。', true); return; }
+        showToast('備考を更新しました。');
+        var r = TOKU_ROWS.find(function(x){ return x.appId === tEditingAppId; });
+        if (r) r.biko = biko;
+      })
+      .catch(function(){ tSaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
   function loadTokubetsuList(){
