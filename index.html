@@ -284,6 +284,9 @@
   tr.sortable-ghost{opacity:.35;}
   .retiredbadge{font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:999px;
     background:var(--denied); color:#fff; margin-left:7px; font-family:var(--mono);}
+  /* 2026-10-24新設：退職日を入力済みだがまだ退職日当日を過ぎていない（＝在籍中一覧に
+     残っている）社員向けの別バッジ。既に退職した人と見た目で区別する */
+  .retiredbadge-pending{background:var(--pending);}
 
   /* ── ホーム ── */
   .sheetlink{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--rail);}
@@ -2199,8 +2202,19 @@
   var mState = { name:'', koyou:'', showRetired:false };
   var shainSortable = null;
 
+  // 2026-10-24変更：退職者扱いの基準を「退職日が入力されているか」から「退職日の翌日を
+  // 過ぎたか」に変更した（バックエンドのisRetiredOn、社員.gsと同じ基準に統一）。
+  // 先々の退職日を前もって入力しても、当日までは在籍中一覧に残り続ける（退職予定バッジで区別）
+  function todayDateStr_(){
+    var d = new Date();
+    return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+  }
+  function isActuallyRetired_(r){
+    if (!r.retirementDate) return false;
+    return todayDateStr_() > r.retirementDate;
+  }
   function mMatches(r){
-    if (!!r.retirementDate !== mState.showRetired) return false; // showRetired=falseなら在籍中のみ、trueなら退職者のみ
+    if (isActuallyRetired_(r) !== mState.showRetired) return false; // showRetired=falseなら在籍中のみ、trueなら退職者のみ
     if (mState.koyou && r.koyouKbn !== mState.koyou) return false;
     if (mState.name && r.name !== mState.name) return false;
     return true;
@@ -2208,7 +2222,7 @@
 
   function populateShainDropdown(){
     var nameSel = document.getElementById('fm-name');
-    var pool = SHAIN_ROWS.filter(function(r){ return !!r.retirementDate === mState.showRetired; });
+    var pool = SHAIN_ROWS.filter(function(r){ return isActuallyRetired_(r) === mState.showRetired; });
     var names = sortByShainOrder_(Array.from(new Set(pool.map(function(r){ return r.name; }))));
     nameSel.innerHTML = '<option value="">すべて</option>' +
       names.map(function(n){ return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
@@ -2232,7 +2246,9 @@
       tr.dataset.email = r.email;
       tr.innerHTML =
         '<td class="drag-handle' + (reorderable ? '' : ' disabled') + '">⠿</td>' +
-        '<td class="name">' + escapeHtml(r.name) + (r.retirementDate ? '<span class="retiredbadge">退職</span>' : '') + '</td>' +
+        '<td class="name">' + escapeHtml(r.name) +
+          (r.retirementDate ? (isActuallyRetired_(r) ? '<span class="retiredbadge">退職</span>' : '<span class="retiredbadge retiredbadge-pending">退職予定</span>') : '') +
+        '</td>' +
         '<td>' + kbnBadge_(r.koyouKbn) + '</td>' +
         '<td class="mono">' + escapeHtml(r.teijiStart || '—') + '〜' + escapeHtml(r.teijiEnd || '—') + '</td>' +
         '<td class="mono">' + escapeHtml(r.nyushaDate || '—') + '</td>' +
