@@ -118,6 +118,9 @@
   .refreshbtn{font-family:var(--mono); font-size:11px; font-weight:700; padding:6px 10px; border-radius:5px;
     border:1px solid var(--line); background:var(--field); color:var(--dim); cursor:pointer;}
   .refreshbtn.toggle-on{background:var(--rail); border-color:var(--rail); color:var(--rail-ink);}
+  .kyuyobtn{font-family:var(--mono); font-size:15px; font-weight:700; width:32px; height:28px; border-radius:5px;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink); cursor:pointer;}
+  .kyuyobtn:disabled{cursor:not-allowed; opacity:.6;}
 
   /* ── 検査票グリッド ── */
   .sheet{background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:auto; max-height:70vh;}
@@ -2725,6 +2728,9 @@
     var tbody = document.getElementById('gesshu-tbody');
     var filtered = GESSHU_ROWS.filter(gMatches);
     tbody.innerHTML = '';
+    // 2026-10-24新設：「給与じまん\n入力完了」列だけ、専用シート（給与じまん状況）と連動する
+    // クリック可能なトグルに変える（他の列は従来通りシートの値をそのまま表示するだけ）
+    var kyuyoJimanColIdx = GESSHU_HEADERS.indexOf('給与じまん\n入力完了');
     filtered.forEach(function(r){
       var tr = document.createElement('tr');
       tr.innerHTML = r.values.map(function(v, i){
@@ -2736,6 +2742,9 @@
         if (GESSHU_COLUMN_FONT_COLORS[i]) styleParts.push('color:' + GESSHU_COLUMN_FONT_COLORS[i]);
         var bg = styleParts.length ? ' style="' + styleParts.join(';') + ';"' : '';
         var cls = i === 0 ? 'name stickyname' : 'mono';
+        if (i === kyuyoJimanColIdx) {
+          return '<td class="' + cls + '"' + bg + '><button class="kyuyobtn" data-email="' + escapeHtml(r.email) + '" data-done="' + (text === '✓' ? '1' : '0') + '"' + (isPastYearView ? ' disabled' : '') + '>' + escapeHtml(text) + '</button></td>';
+        }
         return '<td class="' + cls + '"' + bg + '>' + escapeHtml(text) + '</td>';
       }).join('');
       tbody.appendChild(tr);
@@ -2747,6 +2756,27 @@
   document.getElementById('fg-name').addEventListener('change', function(e){ gState.name = e.target.value; renderGesshuTable(); });
   document.getElementById('fg-label').addEventListener('change', function(e){ gState.label = e.target.value; loadGesshuList(); });
   document.getElementById('gesshu-refresh').addEventListener('click', function(){ loadGesshuList(); });
+
+  var kyuyoSaving = false;
+  document.getElementById('gesshu-tbody').addEventListener('click', function(e){
+    var btn = e.target.closest('.kyuyobtn'); if (!btn || kyuyoSaving) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var email = btn.dataset.email;
+    var newDone = btn.dataset.done !== '1';
+    kyuyoSaving = true; btn.disabled = true;
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateKyuyoJimanFlag', token: idToken, label: gState.label, email: email, done: newDone })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        kyuyoSaving = false; btn.disabled = false;
+        if (!data.success) { showToast(data.message || '更新に失敗しました。', true); return; }
+        btn.textContent = newDone ? '✓' : '□';
+        btn.dataset.done = newDone ? '1' : '0';
+      })
+      .catch(function(){ kyuyoSaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
+  });
 
   function loadGesshuList(){
     document.getElementById('gesshu-resultcount').textContent = '読み込み中…';
