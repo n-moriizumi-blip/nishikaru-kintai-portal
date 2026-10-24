@@ -1610,6 +1610,9 @@
   }
 
   var shinseiLoaded = false, dakokuLoaded = false, shuseiLoaded = false, zangyouLoaded = false, shainLoaded = false, yukyuLoaded = false, tokubetsuLoaded = false, dengonLoaded = false, gesshuLoaded = false, shuubetsuLoaded = false, dakokukakuninLoaded = false;
+  // 2026-10-24新設：各タブの自動更新（時間ベース・イベント駆動どちらも）が「今表示中の
+  // タブだけ」反映すればよいよう、現在表示中のタブ名をここに追跡する（ナビクリックのたびに更新）
+  var currentActiveTab = 'home';
   // ジャンプ＋絞り込み（ホーム画面の一覧から該当タブを開いて氏名等で絞り込む）のため、
   // 各タブの初回読み込みのPromiseをここに保持する。既に読み込み済みのタブはresolve済みの
   // ままなので、jumpToTabは毎回.then()するだけで「未読込なら待つ・既読込なら即実行」を両立できる
@@ -1622,6 +1625,7 @@
     btn.addEventListener('click', function(){
       document.querySelectorAll('.rail nav button').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
+      currentActiveTab = btn.dataset.nav;
       ['home','shinsei','shusei','dakoku','shuukei','yukyu','tokubetsu','dengon','gesshu','shuubetsu','dakokukakunin','shain','guide'].forEach(function(name){
         document.getElementById('page-' + name).hidden = (name !== btn.dataset.nav);
       });
@@ -1809,12 +1813,15 @@
     }
   }
 
-  function loadShinseiList(){
-    document.getElementById('resultcount').textContent = '読み込み中…';
+  // quiet=true：90秒おきの裏側の定期自動更新から呼ばれる。「読み込み中…」表示やエラー時の
+  // トーストを出さず、黙って次回のポーリングに任せる（画面を乱したくないため。ホームタブの
+  // loadHomeSummary(quiet)と同じ考え方）
+  function loadShinseiList(quiet){
+    if (!quiet) document.getElementById('resultcount').textContent = '読み込み中…';
     return fetch(portalApiUrl_('portalShinseiList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || '一覧の取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || '一覧の取得に失敗しました。', true); return; }
         ROWS = (data.rows || []).map(function(r){
           r.detail = buildDetail(r);
           return r;
@@ -1822,7 +1829,7 @@
         populateFilterDropdowns();
         render();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 打刻ログ（簡易検索。打刻確認シートの月次異常表示を置き換えるものではない） ──
@@ -1871,17 +1878,18 @@
   document.getElementById('fd-date').addEventListener('change', function(e){ dState.date = e.target.value; renderDakoku(); });
   document.getElementById('dakoku-refresh').addEventListener('click', function(){ loadDakokuList(); });
 
-  function loadDakokuList(){
-    document.getElementById('dakoku-resultcount').textContent = '読み込み中…';
+  // quiet=true：60秒おきの裏側の定期自動更新から呼ばれる（打刻は日中ずっと発生するため）
+  function loadDakokuList(quiet){
+    if (!quiet) document.getElementById('dakoku-resultcount').textContent = '読み込み中…';
     return fetch(portalApiUrl_('portalDakokuList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || '打刻ログの取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || '打刻ログの取得に失敗しました。', true); return; }
         DAKOKU_ROWS = data.rows || [];
         populateDakokuDropdown();
         renderDakoku();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 修正依頼（申請一覧と同じ承認/否認/差し戻しの仕組み） ──
@@ -2026,17 +2034,18 @@
     var b = e.target.closest('[data-act]'); if (b) doShuseiAction(b.dataset.id, b.dataset.act);
   });
 
-  function loadShuuseiList(){
-    document.getElementById('shusei-resultcount').textContent = '読み込み中…';
+  // quiet=true：90秒おきの裏側の定期自動更新から呼ばれる
+  function loadShuuseiList(quiet){
+    if (!quiet) document.getElementById('shusei-resultcount').textContent = '読み込み中…';
     return fetch(portalApiUrl_('portalShuuseiList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || '修正依頼一覧の取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || '修正依頼一覧の取得に失敗しました。', true); return; }
         SHUSEI_ROWS = data.rows || [];
         populateShuseiDropdown();
         renderShusei();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 36協定（閲覧専用。年間残業・36協定シートをそのまま表示） ──
@@ -2145,17 +2154,18 @@
     var tr = e.target.closest('tr'); if (tr) openZangyouDrawer(tr.dataset.email);
   });
 
-  function loadZangyouList(){
-    document.getElementById('zangyou-resultcount').textContent = '読み込み中…';
+  // quiet=true：90秒おきの裏側の定期自動更新から呼ばれる
+  function loadZangyouList(quiet){
+    if (!quiet) document.getElementById('zangyou-resultcount').textContent = '読み込み中…';
     return fetch(portalApiUrl_('portalZangyou36List'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || 'データの取得に失敗しました。', true); return; }
         ZANGYOU_ROWS = data.rows || [];
         populateZangyouDropdown();
         renderZangyou();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 社員マスタ（2026-10-23、「データベース化」フェーズ1.5：ポータルから編集・新規追加・
@@ -2454,17 +2464,19 @@
       .catch(function(){ ySaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
-  function loadYukyuList(){
-    document.getElementById('yukyu-resultcount').textContent = '読み込み中…';
+  // quiet=true：イベント駆動の自動更新（承認確定・毎朝バッチ等でデータが変わった時だけ、
+  // pollPortalDataVersions_経由で呼ばれる）から呼ばれる
+  function loadYukyuList(quiet){
+    if (!quiet) document.getElementById('yukyu-resultcount').textContent = '読み込み中…';
     return fetch(portalApiUrl_('portalYukyuList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || 'データの取得に失敗しました。', true); return; }
         YUKYU_ROWS = data.rows || [];
         populateYukyuDropdown();
         renderYukyu();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 特別休暇管理（閲覧専用） ──
@@ -2566,17 +2578,19 @@
       .catch(function(){ tSaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
-  function loadTokubetsuList(){
-    document.getElementById('tokubetsu-resultcount').textContent = '読み込み中…';
+  // quiet=true：イベント駆動の自動更新（承認時・毎朝バッチ・備考編集等でデータが変わった時
+  // だけ、pollPortalDataVersions_経由で呼ばれる）から呼ばれる
+  function loadTokubetsuList(quiet){
+    if (!quiet) document.getElementById('tokubetsu-resultcount').textContent = '読み込み中…';
     fetch(portalApiUrl_('portalTokubetsuList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || 'データの取得に失敗しました。', true); return; }
         TOKU_ROWS = data.rows || [];
         populateTokubetsuDropdown();
         renderTokubetsu();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 伝言板（閲覧＋新規作成） ──
@@ -2703,17 +2717,18 @@
       .catch(function(){ dgSending = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
-  function loadDengonList(){
-    document.getElementById('dengon-resultcount').textContent = '読み込み中…';
+  // quiet=true：60秒おきの裏側の定期自動更新から呼ばれる（メッセージがいつ届くか読めないため）
+  function loadDengonList(quiet){
+    if (!quiet) document.getElementById('dengon-resultcount').textContent = '読み込み中…';
     fetch(portalApiUrl_('portalDengonList'))
       .then(function(res){ return res.json(); })
       .then(function(data){
-        if (!data.success) { showToast(data.error || 'データの取得に失敗しました。', true); return; }
+        if (!data.success) { if (!quiet) showToast(data.error || 'データの取得に失敗しました。', true); return; }
         DENGON_ROWS = data.rows || [];
         populateDengonDropdown();
         renderDengon();
       })
-      .catch(function(){ showToast('通信エラーが発生しました。', true); });
+      .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
   }
 
   // ── 月次集計・週別実働・打刻確認（月ごとに別シートのため共通の月選択が必要） ──
@@ -2808,15 +2823,18 @@
       .catch(function(){ kyuyoSaving = false; btn.disabled = false; showToast('通信エラーが発生しました。', true); });
   });
 
-  function loadGesshuList(){
-    document.getElementById('gesshu-resultcount').textContent = '読み込み中…';
+  // quiet=true：イベント駆動の自動更新（日次バッチ・「過去の期間を再計算」後だけ、
+  // pollPortalDataVersions_経由で呼ばれる）から呼ばれる。月選択欄は作り直さず、今選んでいる
+  // gState.labelのまま再取得する（作り直すとちらつく・一瞬選択が外れて見えるため）
+  function loadGesshuList(quiet){
+    if (!quiet) document.getElementById('gesshu-resultcount').textContent = '読み込み中…';
     ensureMonthlyLabelsLoaded_(function(){
-      gState.label = populateMonthlyLabelSelect_('fg-label', gState.label);
-      if (!gState.label) { document.getElementById('gesshu-resultcount').textContent = '利用可能な月がありません。'; return; }
+      if (!quiet) gState.label = populateMonthlyLabelSelect_('fg-label', gState.label);
+      if (!gState.label) { if (!quiet) document.getElementById('gesshu-resultcount').textContent = '利用可能な月がありません。'; return; }
       fetch(portalApiUrl_('portalGesshuList', { label: gState.label }))
         .then(function(res){ return res.json(); })
         .then(function(data){
-          if (!data.success) { showToast(data.error || '月次集計の取得に失敗しました。', true); return; }
+          if (!data.success) { if (!quiet) showToast(data.error || '月次集計の取得に失敗しました。', true); return; }
           GESSHU_HEADERS = data.headers || [];
           GESSHU_ROWS = data.rows || [];
           GESSHU_COLUMN_COLORS = data.columnColors || [];
@@ -2824,7 +2842,7 @@
           populateGesshuNameDropdown();
           renderGesshuTable();
         })
-        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+        .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
     });
   }
 
@@ -2884,15 +2902,16 @@
   document.getElementById('fw-label').addEventListener('change', function(e){ wState.label = e.target.value; loadShuubetsuList(); });
   document.getElementById('shuubetsu-refresh').addEventListener('click', function(){ loadShuubetsuList(); });
 
-  function loadShuubetsuList(){
-    document.getElementById('shuubetsu-resultcount').textContent = '読み込み中…';
+  // quiet=true：イベント駆動の自動更新（pollPortalDataVersions_経由）から呼ばれる
+  function loadShuubetsuList(quiet){
+    if (!quiet) document.getElementById('shuubetsu-resultcount').textContent = '読み込み中…';
     ensureMonthlyLabelsLoaded_(function(){
-      wState.label = populateMonthlyLabelSelect_('fw-label', wState.label);
-      if (!wState.label) { document.getElementById('shuubetsu-resultcount').textContent = '利用可能な月がありません。'; return; }
+      if (!quiet) wState.label = populateMonthlyLabelSelect_('fw-label', wState.label);
+      if (!wState.label) { if (!quiet) document.getElementById('shuubetsu-resultcount').textContent = '利用可能な月がありません。'; return; }
       fetch(portalApiUrl_('portalShuubetsuList', { label: wState.label }))
         .then(function(res){ return res.json(); })
         .then(function(data){
-          if (!data.success) { showToast(data.error || '週別実働の取得に失敗しました。', true); return; }
+          if (!data.success) { if (!quiet) showToast(data.error || '週別実働の取得に失敗しました。', true); return; }
           SHUUBETSU_WEEKS = data.weeks || [];
           SHUUBETSU_ROWS = data.rows || [];
           SHUUBETSU_SUBCOL_COLORS = data.subColColors || [];
@@ -2900,7 +2919,7 @@
           populateShuubetsuNameDropdown();
           renderShuubetsuTable();
         })
-        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+        .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
     });
   }
 
@@ -2989,20 +3008,21 @@
   document.getElementById('fk-label').addEventListener('change', function(e){ kState.label = e.target.value; loadDakokuKakuninList(); });
   document.getElementById('dakokukakunin-refresh').addEventListener('click', function(){ loadDakokuKakuninList(); });
 
-  function loadDakokuKakuninList(){
-    document.getElementById('dakokukakunin-resultcount').textContent = '読み込み中…';
+  // quiet=true：イベント駆動の自動更新（pollPortalDataVersions_経由）から呼ばれる
+  function loadDakokuKakuninList(quiet){
+    if (!quiet) document.getElementById('dakokukakunin-resultcount').textContent = '読み込み中…';
     ensureMonthlyLabelsLoaded_(function(){
-      kState.label = populateMonthlyLabelSelect_('fk-label', kState.label);
-      if (!kState.label) { document.getElementById('dakokukakunin-resultcount').textContent = '利用可能な月がありません。'; return; }
+      if (!quiet) kState.label = populateMonthlyLabelSelect_('fk-label', kState.label);
+      if (!kState.label) { if (!quiet) document.getElementById('dakokukakunin-resultcount').textContent = '利用可能な月がありません。'; return; }
       fetch(portalApiUrl_('portalDakokuKakuninList', { label: kState.label }))
         .then(function(res){ return res.json(); })
         .then(function(data){
-          if (!data.success) { showToast(data.error || '打刻確認の取得に失敗しました。', true); return; }
+          if (!data.success) { if (!quiet) showToast(data.error || '打刻確認の取得に失敗しました。', true); return; }
           DAKOKU_KAKUNIN_DATA = data;
           populateDakokuKakuninNameDropdown();
           renderDakokuKakuninTable();
         })
-        .catch(function(){ showToast('通信エラーが発生しました。', true); });
+        .catch(function(){ if (!quiet) showToast('通信エラーが発生しました。', true); });
     });
   }
 
@@ -3316,6 +3336,70 @@
     shainLoaded = true;         tabReady.shain         = loadShainList();
   }
 
+  // ── 各タブの自動更新（2026-10-24新設） ──────────────────────────────
+  // タブごとに実際の更新頻度特性が違うため、3つの方式に分けている（ユーザーと合意済み）：
+  //   A・B：時間ベース（打刻ログ・伝言板は60秒、申請一覧・修正依頼・残業は90秒）。
+  //         「今表示中のタブ」の時だけ実際にfetchする（裏タブのまま回しても無駄なため、
+  //         setIntervalの発火自体は常時・tick内でcurrentActiveTabを見て判定する）
+  //   C：イベント駆動（月次集計・週別実働・打刻確認・有給管理・特別休暇管理）。日次バッチや
+  //      「過去の期間を再計算」等の実行後だけ変わるため、時間では無く「サーバー側で実際に
+  //      更新された時刻」(touchPortalDataVersion_、ユーティリティ.gs)をPORTAL_DV_CONFIG_経由で
+  //      30秒おきに軽量ポーリングし、値が変わった時だけ再取得する
+  //   D：社員マスタは自動更新なし（編集時のみ変化するため、手動の「再読み込み」のみ）
+
+  // A・B：時間ベース自動更新
+  function startTabAutoRefresh_(tabName, intervalMs, loadFn){
+    setInterval(function(){
+      if (currentActiveTab === tabName) loadFn(true);
+    }, intervalMs);
+  }
+
+  // C：イベント駆動自動更新の設定。isEditingがある項目は、該当のdrawer（編集フォーム）が
+  // 開いている間は上書きしない（次回のポーリングまで反映を待つ）
+  var PORTAL_DV_CONFIG_ = {
+    gesshu:        { tab: 'gesshu',        clear: function(){ gesshuLoaded = false; },        reload: function(){ loadGesshuList(true); } },
+    shuubetsu:     { tab: 'shuubetsu',     clear: function(){ shuubetsuLoaded = false; },     reload: function(){ loadShuubetsuList(true); } },
+    dakokukakunin: { tab: 'dakokukakunin', clear: function(){ dakokukakuninLoaded = false; }, reload: function(){ loadDakokuKakuninList(true); } },
+    yukyu:         { tab: 'yukyu',         clear: function(){ yukyuLoaded = false; },         reload: function(){ loadYukyuList(true); },
+                     isEditing: function(){ return document.getElementById('y-drawer').classList.contains('open'); } },
+    tokubetsu:     { tab: 'tokubetsu',     clear: function(){ tokubetsuLoaded = false; },     reload: function(){ loadTokubetsuList(true); },
+                     isEditing: function(){ return document.getElementById('t-drawer').classList.contains('open'); } },
+  };
+  var PORTAL_DV_LAST_ = {};  // キーごとの「最後に見たサーバー側の更新時刻」
+  var PORTAL_DV_DIRTY_ = {}; // キーごとの「変化を検知したが、まだ画面に反映できていない」フラグ
+  function pollPortalDataVersions_(){
+    fetch(portalApiUrl_('portalDataVersions'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) return;
+        var v = data.versions || {};
+        Object.keys(PORTAL_DV_CONFIG_).forEach(function(key){
+          var nv = v[key] || '';
+          if (PORTAL_DV_LAST_[key] === undefined) { PORTAL_DV_LAST_[key] = nv; return; } // 初回は基準値として記録するだけ
+          if (nv !== PORTAL_DV_LAST_[key]) { PORTAL_DV_LAST_[key] = nv; PORTAL_DV_DIRTY_[key] = true; }
+          if (!PORTAL_DV_DIRTY_[key]) return;
+          var cfg = PORTAL_DV_CONFIG_[key];
+          if (currentActiveTab === cfg.tab) {
+            if (cfg.isEditing && cfg.isEditing()) return; // 編集中は反映せず、次回のポーリングで再判定
+            cfg.reload();
+          } else {
+            cfg.clear(); // 見ていない間に変わった分は、次にそのタブを開いた時に読み直させる
+          }
+          PORTAL_DV_DIRTY_[key] = false;
+        });
+      })
+      .catch(function(){});
+  }
+
+  function startAllTabAutoRefresh_(){
+    startTabAutoRefresh_('dakoku', 60000, loadDakokuList);
+    startTabAutoRefresh_('dengon', 60000, loadDengonList);
+    startTabAutoRefresh_('shinsei', 90000, loadShinseiList);
+    startTabAutoRefresh_('shusei', 90000, loadShuuseiList);
+    startTabAutoRefresh_('shuukei', 90000, loadZangyouList);
+    setInterval(pollPortalDataVersions_, 30000);
+  }
+
   // ── 管理操作（スプレッドシートのメニュー「⚙️ 勤怠管理」と同じ処理をポータンから。
   // 2026-10-19新設） ──
   function postAdminAction_(action, extra, btn){
@@ -3376,6 +3460,7 @@
         loadFiscalYears_();
         initDeepLinkFromUrl_();
         startHomeAutoRefresh_();
+        startAllTabAutoRefresh_();
         prefetchOtherTabs_();
         // ログイン後45分おきに先回りでトークンを裏側更新し、1時間の失効時間切れを
         // そもそも起こしにくくする（失効してしまった場合もTokenRefresh.wait()側が拾う）
