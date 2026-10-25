@@ -1179,7 +1179,9 @@
   <div class="composer-field"><label>NFCタグID</label><div class="composer-readonly" id="m-f-nfc">—</div>
     <span class="composer-hint">タブレットの隠し画面「NFCタグ読み取りモード」で別途登録してください。</span></div>
   <div class="composer-field"><label>備考</label><textarea id="m-f-biko"></textarea></div>
-  <div class="drawer-actions"><button class="go" id="m-save">保存</button></div>
+  <!-- 2026-10-25新設：開いた直後は閲覧専用（各入力欄disabled）にし、「編集する」ボタンを
+       押すまで書き換えられないようにした（誤って書き換えてしまう事故の防止、ユーザー要望） -->
+  <div class="drawer-actions"><button class="go" id="m-edit-start">編集する</button><button class="go hidden" id="m-save">保存</button></div>
 </div>
 
 <div class="drawer-backdrop" id="y-backdrop"></div>
@@ -1203,7 +1205,8 @@
     <span class="composer-hint">新規社員追加時は0スタートのため、現時点の正しい残日数を入力してください。入力後はGASが自動更新します。</span></div>
   <div class="composer-field"><label>積立有給繰越残</label><input type="number" step="0.5" id="y-f-tkurikoshi">
     <span class="composer-hint">積立有給が無ければ0のままで構いません。</span></div>
-  <div class="drawer-actions"><button class="go" id="y-save">保存</button></div>
+  <!-- 2026-10-25新設：社員マスタと同じ閲覧専用→「編集する」方式 -->
+  <div class="drawer-actions"><button class="go" id="y-edit-start">編集する</button><button class="go hidden" id="y-save">保存</button></div>
 </div>
 
 <div class="drawer-backdrop" id="t-backdrop"></div>
@@ -2326,17 +2329,32 @@
     document.getElementById('m-f-nfc').textContent = r && r.nfcId ? r.nfcId : '（未登録）';
     document.getElementById('m-f-biko').value = r ? (r.biko || '') : '';
   }
+  // 2026-10-25新設：既存社員の情報を誤って書き換えてしまう事故を防ぐため、ドロワーを開いた
+  // 直後は各入力欄をdisabledにし（メールアドレスは既存の仕組みでそのまま制御）、「編集する」
+  // ボタンを押すまで書き換えられないようにする。新規追加（openShainComposer）は元々データが
+  // 空で誤って既存値を壊すリスクが無いため、この対象外（最初から編集可能）
+  var M_EDITABLE_FIELD_IDS = ['m-f-name','m-f-furigana','m-f-koyou','m-f-teijistart','m-f-teijiend',
+    'm-f-nyusha','m-f-taishoku','m-f-workdays','m-f-dokuji','m-f-testsanka','m-f-webhook','m-f-biko'];
+  function setShainEditable_(editable){
+    M_EDITABLE_FIELD_IDS.forEach(function(id){ var el = document.getElementById(id); if (el) el.disabled = !editable; });
+    document.getElementById('m-edit-start').classList.toggle('hidden', editable);
+    document.getElementById('m-save').classList.toggle('hidden', !editable);
+  }
+  document.getElementById('m-edit-start').addEventListener('click', function(){ setShainEditable_(true); });
+
   function openShainDrawer(email){
     var r = SHAIN_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
     mEditingEmail = email;
     document.getElementById('m-drawer-title').textContent = r.name + 'さんの情報を編集';
     fillShainForm_(r);
+    setShainEditable_(false);
     mDrawer.classList.add('open'); mDrawer.setAttribute('aria-hidden','false'); mBackdrop.classList.add('open');
   }
   function openShainComposer(){
     mEditingEmail = null;
     document.getElementById('m-drawer-title').textContent = '社員を新規追加';
     fillShainForm_(null);
+    setShainEditable_(true);
     mDrawer.classList.add('open'); mDrawer.setAttribute('aria-hidden','false'); mBackdrop.classList.add('open');
   }
   function closeShainDrawer(){ mDrawer.classList.remove('open'); mDrawer.setAttribute('aria-hidden','true'); mBackdrop.classList.remove('open'); }
@@ -2451,6 +2469,15 @@
 
   var yDrawer = document.getElementById('y-drawer'), yBackdrop = document.getElementById('y-backdrop');
   var yEditingEmail = null;
+  // 2026-10-25新設：社員マスタと同じ「開いた直後は閲覧専用、編集するボタンで初めて入力可能」方式
+  var Y_EDITABLE_FIELD_IDS = ['y-f-fuyo', 'y-f-zanzan', 'y-f-tkurikoshi'];
+  function setYukyuEditable_(editable){
+    Y_EDITABLE_FIELD_IDS.forEach(function(id){ var el = document.getElementById(id); if (el) el.disabled = !editable; });
+    document.getElementById('y-edit-start').classList.toggle('hidden', editable);
+    document.getElementById('y-save').classList.toggle('hidden', !editable);
+  }
+  document.getElementById('y-edit-start').addEventListener('click', function(){ setYukyuEditable_(true); });
+
   function openYukyuDrawer(email){
     var r = YUKYU_ROWS.find(function(x){ return x.email === email; }); if (!r) return;
     yEditingEmail = email;
@@ -2465,6 +2492,7 @@
     document.getElementById('y-f-fuyo').value = r.fuyoNissu || 0;
     document.getElementById('y-f-zanzan').value = r.zanzanNissu || 0;
     document.getElementById('y-f-tkurikoshi').value = r.tsumitateKurikoshi || 0;
+    setYukyuEditable_(false);
     yDrawer.classList.add('open'); yDrawer.setAttribute('aria-hidden','false'); yBackdrop.classList.add('open');
   }
   function closeYukyuDrawer(){ yDrawer.classList.remove('open'); yDrawer.setAttribute('aria-hidden','true'); yBackdrop.classList.remove('open'); }
