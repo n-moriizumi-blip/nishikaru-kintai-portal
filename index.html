@@ -1363,6 +1363,25 @@
     });
   }
 
+  // 2026-10-25新設：有給管理・月次集計・週別実働・打刻確認（列順）の「全社員一覧」型4タブは、
+  // サーバーが返す順（対象シート自体の行順）のままで、社員マスタの並べ替えとは無関係だった
+  // （社員マスタ並べ替え自体は行の位置を保ったまま値だけ入れ替えるため、有給管理・年間残業
+  // 36協定シートの行順には影響しない設計。詳細はCLAUDE.md参照）。ユーザー要望で、この4タブ
+  // だけは表示直前にsortByShainOrder_と同じ考え方で並べ替える（申請一覧・修正依頼・伝言板・
+  // 打刻ログ等の「イベント1件1行」系タブは対象外、時系列の使い勝手を優先してそのまま）
+  function sortRowsByShainOrder_(rows, nameKey){
+    var orderIndex = {};
+    SHAIN_ROWS.forEach(function(r, i){ if (!(r.name in orderIndex)) orderIndex[r.name] = i; });
+    return rows.slice().sort(function(a, b){
+      var na = typeof nameKey === 'function' ? nameKey(a) : a[nameKey];
+      var nb = typeof nameKey === 'function' ? nameKey(b) : b[nameKey];
+      var ia = orderIndex.hasOwnProperty(na) ? orderIndex[na] : Infinity;
+      var ib = orderIndex.hasOwnProperty(nb) ? orderIndex[nb] : Infinity;
+      if (ia !== ib) return ia - ib;
+      return String(na).localeCompare(String(nb), 'ja');
+    });
+  }
+
   // 雇用区分（正社員/パート）をひと目で見分けられるバッジにする（2026-10-17、ユーザー要望で追加）
   function kbnBadge_(kbn){
     if (!kbn) return '—';
@@ -1492,6 +1511,11 @@
       escapeHtml(r.appId) + '" title="' + escapeHtml(detail) + '（クリックで確認済みにする）">要確認</button>';
   }
 
+  // 2026-10-25新設：残業・出張はJIZEN_JIGO列が常に「事前」固定（打刻ログの実打刻と対応させる
+  // 「事後」の仕組みを持たないため、本人が選ぶボタン自体も無い）で、表示しても意味のある
+  // 情報にならない。有給・遅刻・早退（本人が事前/事後を選ぶ）だけ表示する
+  function isJizenGoApplicable_(r){ return r.yukyuKbn !== '残業' && r.yukyuKbn !== '出張'; }
+
   function render(){
     var tbody = document.getElementById('tbody');
     var filtered = ROWS.filter(matches);
@@ -1510,7 +1534,7 @@
         '<td>' + escapeHtml(r.yukyuKbn || '—') + '</td>' +
         '<td>' + escapeHtml(r.detail) + '</td>' +
         '<td class="mono">' + escapeHtml(buildDateLabel(r)) + '</td>' +
-        '<td>' + escapeHtml(r.jizenGo || '—') + '</td>' +
+        '<td>' + (isJizenGoApplicable_(r) ? escapeHtml(r.jizenGo || '—') : '—') + '</td>' +
         '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
         '<td>' + buildNeedsReviewBadge_(r) + '</td>' +
         '<td><div class="rowbtns">' + btns + '</div></td>';
@@ -1546,7 +1570,7 @@
     document.getElementById('d-ykbn').textContent = r.yukyuKbn || '—';
     document.getElementById('d-type').textContent = r.detail;
     document.getElementById('d-date').textContent = buildDateLabel(r);
-    document.getElementById('d-jizen').textContent = r.jizenGo || '—';
+    document.getElementById('d-jizen').textContent = isJizenGoApplicable_(r) ? (r.jizenGo || '—') : '—';
     var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
     document.getElementById('d-status').innerHTML = '<span class="stamp ' + st[0] + '">' + st[1] + '</span>';
     document.getElementById('d-reason').textContent = r.riyu || '（記入なし）';
@@ -2439,7 +2463,7 @@
 
   function renderYukyu(){
     var tbody = document.getElementById('yukyu-tbody');
-    var filtered = YUKYU_ROWS.filter(yMatches);
+    var filtered = sortRowsByShainOrder_(YUKYU_ROWS.filter(yMatches), 'name');
     tbody.innerHTML = '';
     filtered.forEach(function(r){
       var tr = document.createElement('tr');
@@ -2839,7 +2863,7 @@
         return '<th' + (i === 0 ? ' class="stickyname-head"' : '') + '>' + escapeHtml(h).replace(/\n/g, '<br>') + '</th>';
       }).join('') + '</tr>';
     var tbody = document.getElementById('gesshu-tbody');
-    var filtered = GESSHU_ROWS.filter(gMatches);
+    var filtered = sortRowsByShainOrder_(GESSHU_ROWS.filter(gMatches), function(r){ return r.values[0]; });
     tbody.innerHTML = '';
     // 2026-10-24新設：「給与じまん\n入力完了」列だけ、専用シート（給与じまん状況）と連動する
     // クリック可能なトグルに変える（他の列は従来通りシートの値をそのまま表示するだけ）
@@ -2943,7 +2967,7 @@
     // 同じ修正。Webフォント読み込みタイミングでズレて1段目〈氏名〉が隠れる不具合があった）
 
     var tbody = document.getElementById('shuubetsu-tbody');
-    var filtered = SHUUBETSU_ROWS.filter(wMatches);
+    var filtered = sortRowsByShainOrder_(SHUUBETSU_ROWS.filter(wMatches), 'name');
     tbody.innerHTML = '';
     filtered.forEach(function(r){
       var tr = document.createElement('tr');
@@ -3013,7 +3037,8 @@
     var data = DAKOKU_KAKUNIN_DATA;
     var allNames = data.employeeNames || [];
     var pickedIdx = kState.name ? allNames.indexOf(kState.name) : -1;
-    var empIdxs = pickedIdx !== -1 ? [pickedIdx] : allNames.map(function(_, i){ return i; });
+    var empIdxs = pickedIdx !== -1 ? [pickedIdx] :
+      sortRowsByShainOrder_(allNames.map(function(_, i){ return i; }), function(i){ return allNames[i]; });
 
     // マス目の幅を社員ごとに揃えるため、列幅を固定したcolgroupを組み立てる（table-layout:fixed
     // と組み合わせることで、備考の文字数で社員ごとに列幅がバラバラになるのを防ぐ。
