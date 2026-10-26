@@ -1687,14 +1687,28 @@
       // 前回ジャンプ時に残っていた絞り込みを解除する（ユーザー指摘：「別のタブへ移動して
       // また戻ってくると絞り込まれたままになっている」）
       if (!isJumping) resetTabFilter(btn.dataset.nav);
-      // 各タブは初めて開いた時だけ読み込む（ログイン直後の表示を軽くするため）
-      if (btn.dataset.nav === 'shinsei' && !shinseiLoaded) { shinseiLoaded = true; tabReady.shinsei = loadShinseiList(); }
-      if (btn.dataset.nav === 'dakoku' && !dakokuLoaded) { dakokuLoaded = true; tabReady.dakoku = loadDakokuList(); }
-      if (btn.dataset.nav === 'shusei' && !shuseiLoaded) { shuseiLoaded = true; tabReady.shusei = loadShuuseiList(); }
-      if (btn.dataset.nav === 'shuukei' && !zangyouLoaded) { zangyouLoaded = true; tabReady.shuukei = loadZangyouList(); }
+      // 2026-10-26変更：時間ベース自動更新の5タブ（打刻ログ・伝言板・申請一覧・修正依頼・
+      // 36協定）は「今表示中のタブの間だけ」60/90秒おきに裏側で更新される仕組み（startTabAutoRefresh_）
+      // だが、そのタブを見ていない間は一切更新されないため、以前からタブを開いたままの状態で
+      // 別タブを見ていて、しばらくしてから戻ると「見た瞬間はまだ前回表示していた時点の
+      // 古いデータ」になっていた（ユーザー指摘：「何分か前に申請されたものがあったのに
+      // 申請一覧を見たら更新されておらず、再読み込みボタンでようやく反映された」）。
+      // 以前はさらに「初めて開いた時だけ読み込む」キャッシュもかかっていたため、2回目以降の
+      // クリックでは古いデータが表示されたまま、次の自動更新（最大60/90秒後）を待つしかなかった。
+      // ホーム（下記、2026-10-21対応済み）と同じ「タブを開くたびに必ず読み直す」方式に統一し、
+      // クリックした瞬間に必ず最新化されるようにした（読み込み済みフラグ自体はjumpToTab等が
+      // 使うtabReadyのPromise用に残している）
+      if (btn.dataset.nav === 'shinsei') { shinseiLoaded = true; tabReady.shinsei = loadShinseiList(); }
+      if (btn.dataset.nav === 'dakoku') { dakokuLoaded = true; tabReady.dakoku = loadDakokuList(); }
+      if (btn.dataset.nav === 'shusei') { shuseiLoaded = true; tabReady.shusei = loadShuuseiList(); }
+      if (btn.dataset.nav === 'shuukei') { zangyouLoaded = true; tabReady.shuukei = loadZangyouList(); }
+      if (btn.dataset.nav === 'dengon') { dengonLoaded = true; loadDengonList(); }
+      // 以下4タブ（イベント駆動・手動）は従来通り「初めて開いた時だけ」読み込む。イベント駆動
+      // タブは見ていない間に実際にサーバー側で更新があった場合だけpollPortalDataVersions_が
+      // 読み込み済みフラグを落とす仕組みがあるため、見ていない間に変化が無ければ再読み込み
+      // 不要（上記5タブのような「無条件で見ていない間は更新されない」問題は無い）
       if (btn.dataset.nav === 'yukyu' && !yukyuLoaded) { yukyuLoaded = true; tabReady.yukyu = loadYukyuList(); }
       if (btn.dataset.nav === 'tokubetsu' && !tokubetsuLoaded) { tokubetsuLoaded = true; loadTokubetsuList(); }
-      if (btn.dataset.nav === 'dengon' && !dengonLoaded) { dengonLoaded = true; loadDengonList(); }
       if (btn.dataset.nav === 'gesshu' && !gesshuLoaded) { gesshuLoaded = true; loadGesshuList(); }
       if (btn.dataset.nav === 'shuubetsu' && !shuubetsuLoaded) { shuubetsuLoaded = true; loadShuubetsuList(); }
       if (btn.dataset.nav === 'dakokukakunin' && !dakokukakuninLoaded) { dakokukakuninLoaded = true; loadDakokuKakuninList(); }
