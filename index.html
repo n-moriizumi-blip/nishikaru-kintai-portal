@@ -2008,11 +2008,17 @@
   // 2026-10-21新設：「承認済」にしたのに対象の打刻を1件に絞り込めず自動反映されなかった
   // 行（スプレッドシートのK列「自動処理結果」が「未処理（〜）」のまま）が、詳細を開かないと
   // 気づけないとの指摘（ユーザー）を受け、一覧の行に常に見える形でバッジを出す
+  // 2026-10-28変更：以前は<span>（表示のみ）だったため、打刻ログを総務が直接手動で
+  // 直した後も「要確認」のまま表示され続ける問題があった（クリックできないとの指摘）。
+  // 申請一覧の「要確認」バッジ（buildNeedsReviewBadge_）と同じ考え方で、未解決の場合は
+  // クリックで「対応済み」にできるボタンにする（action: markShuseiResolved）
   function buildAutoResultBadge_(r){
     if (!r.autoResult) return '<span class="autobadge autobadge-none">—</span>';
-    var cls = isUnresolved_(r) ? 'autobadge-warn' : 'autobadge-ok';
-    var label = isUnresolved_(r) ? '要確認' : '反映済';
-    return '<span class="autobadge ' + cls + '" title="' + escapeHtml(r.autoResult) + '">' + label + '</span>';
+    if (isUnresolved_(r)) {
+      return '<button type="button" class="autobadge autobadge-warn" data-act="markshuseiresolved" data-id="' +
+        escapeHtml(r.appId) + '" title="' + escapeHtml(r.autoResult) + '（打刻ログを直接直した後、クリックで対応済みにする）">要確認</button>';
+    }
+    return '<span class="autobadge autobadge-ok" title="' + escapeHtml(r.autoResult) + '">反映済</span>';
   }
 
   function renderShusei(){
@@ -2103,9 +2109,40 @@
       .catch(function(){ busy = false; setButtonsDisabled(false); showToast('通信エラーが発生しました。', true); });
   }
 
+  // 2026-10-28新設：修正依頼の「要確認」バッジ解除（申請一覧のdoClearReviewと同じ考え方。
+  // 自動処理結果の文言・承認状況自体は変更しない、表示上のフラグのみ）
+  function doMarkShuseiResolved(id){
+    if (busy) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    var r = SHUSEI_ROWS.find(function(x){ return x.appId === id; }); if (!r) return;
+    if (!confirm('打刻ログの直接修正は済んでいますか？\n「要確認」を解除して対応済みにします。')) return;
+    busy = true;
+    setButtonsDisabled(true);
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'markShuseiResolved', token: idToken, appId: id })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        busy = false; setButtonsDisabled(false);
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast('対応済みにしました：' + r.name + '（' + id + '）');
+        loadShuuseiList();
+      })
+      .catch(function(){
+        busy = false; setButtonsDisabled(false);
+        showToast('通信エラーが発生しました。', true);
+      });
+  }
+
   document.getElementById('shusei-tbody').addEventListener('click', function(e){
     var actBtn = e.target.closest('[data-act]');
-    if (actBtn){ e.stopPropagation(); doShuseiAction(actBtn.dataset.id, actBtn.dataset.act); return; }
+    if (actBtn){
+      e.stopPropagation();
+      if (actBtn.dataset.act === 'markshuseiresolved') doMarkShuseiResolved(actBtn.dataset.id);
+      else doShuseiAction(actBtn.dataset.id, actBtn.dataset.act);
+      return;
+    }
     var tr = e.target.closest('tr'); if (tr) openShuseiDrawer(tr.dataset.id);
   });
   document.getElementById('s-actions').addEventListener('click', function(e){
