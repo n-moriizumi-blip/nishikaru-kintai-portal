@@ -158,6 +158,9 @@
   /* 社員ごとの3列ブロックの境目を太めの縦線で区切る（実シートと同じ#666666。
      ユーザー指摘：「打刻確認がなんか見づらい」への対応） */
   .emp-end{border-right:2px solid #666666;}
+  /* 2026-10-29新設：打刻確認で1人に絞り込んだ時だけ出す備考の詳細（出張届の申請ID・残業実績
+     時間・休憩外出控除の内訳等）。短いステータスと見分けやすいよう控えめなサイズ・色にする */
+  .dk-biko-detail{font-size:10.5px; color:var(--dim); margin-top:2px; white-space:normal;}
   /* マス目が社員ごとにバラバラな幅になって不揃いに見えていたため（備考列の文字数で
      列幅が社員ごとに変わってしまっていた）、colgroupで列幅を固定して揃える */
   #dakokukakunin-table{table-layout:fixed; width:auto;}
@@ -882,6 +885,20 @@
           <tbody id="dakokukakunin-tbody"></tbody>
         </table>
         <div class="emptystate" id="dakokukakunin-emptystate" hidden>データがありません。</div>
+      </div>
+      <!-- 2026-10-29新設：氏名を1人に絞り込んだ時だけ表示する詳細テーブル（スプレッドシートの
+           「実働時間検算」シートと同じ列構成を、その場で計算して表示する。書き込みは行わない） -->
+      <div id="dakokukakunin-detail" class="hidden" style="margin-top:18px;">
+        <h2 style="font-size:15px; margin:0 0 6px;">詳細（出勤・退勤の実打刻／集計用、外出・帰社、実働・残業時間）</h2>
+        <div style="font-size:12px; color:var(--dim); margin:-2px 0 8px 2px;">💡 実打刻と集計用の時刻が異なる行（黄色）＝何らかの補正がかかった日です。</div>
+        <p class="resultcount" id="dakokukakunin-detail-resultcount"></p>
+        <div class="sheet">
+          <table>
+            <thead><tr><th>日付</th><th>曜日</th><th>出勤(実打刻)</th><th>出勤(集計用)</th><th>退勤(実打刻)</th><th>退勤(集計用)</th><th>外出・帰社</th><th>実働時間</th><th>残業時間</th><th class="txtleft">備考</th></tr></thead>
+            <tbody id="dakokukakunin-detail-tbody"></tbody>
+          </table>
+          <div class="emptystate" id="dakokukakunin-detail-emptystate" hidden>この期間の打刻がありません。</div>
+        </div>
       </div>
     </div>
     <div id="page-shain" hidden>
@@ -3126,12 +3143,19 @@
       var cells =
         '<td class="mono dk-col0" style="' + dateStyle + '">' + escapeHtml(day.date) + '</td>' +
         '<td class="mono dk-col1" style="' + dateStyle + '">' + escapeHtml(day.dow) + '</td>';
+      // 2026-10-29新設：氏名を1人に絞り込んでいる時だけ、備考の詳細（出張届の申請ID・
+      // 残業実績時間・休憩外出控除の内訳等）をセルの下に併記する（GAS側createDakokuKakuninSheet
+      // がメモとして持たせている内容。全員表示だと1行が長くなりすぎて見づらいため限定した）
       empIdxs.forEach(function(i){
         var emp = day.employees[i] || {};
+        var bikoHtml = escapeHtml(emp.biko || '');
+        if (pickedIdx !== -1 && emp.bikoDetail) {
+          bikoHtml += '<div class="dk-biko-detail">' + escapeHtml(emp.bikoDetail).replace(/\n/g, '<br>') + '</div>';
+        }
         cells +=
           '<td class="mono" style="' + dkStyle_(emp.shukkinBg, emp.shukkinFc) + '">' + escapeHtml(emp.shukkin || '—') + '</td>' +
           '<td class="mono" style="' + dkStyle_(emp.taikinBg, emp.taikinFc) + '">' + escapeHtml(emp.taikin || '—') + '</td>' +
-          '<td class="emp-end" style="' + dkStyle_(emp.bikoBg, emp.bikoFc) + '">' + escapeHtml(emp.biko || '') + '</td>';
+          '<td class="emp-end" style="' + dkStyle_(emp.bikoBg, emp.bikoFc) + '">' + bikoHtml + '</td>';
       });
       tr.innerHTML = cells;
       tbody.appendChild(tr);
@@ -3142,6 +3166,53 @@
     // 2026-10-24変更：日付・曜日列（A・B列相当）の横スクロール追従は、CSS側（.dk-col0/
     // .dk-col1/.dk-corner、colgroupの固定幅64px/62pxと一致する値をハードコード）で
     // 確定するようにしたため、ここでのJS測定・設定は不要になった
+
+    // 2026-10-29新設：1人に絞り込んだ時だけ、実働時間検算シートと同じ構成の詳細テーブルを表示
+    var detailEl = document.getElementById('dakokukakunin-detail');
+    if (pickedIdx !== -1) {
+      detailEl.classList.remove('hidden');
+      loadDakokuKakuninDetail_(allNames[pickedIdx], kState.label);
+    } else {
+      detailEl.classList.add('hidden');
+    }
+  }
+
+  // 氏名→メールアドレスの変換に社員マスタ（SHAIN_ROWS）を使う。未読み込みならここで取得する
+  function loadDakokuKakuninDetail_(name, label){
+    var tbody = document.getElementById('dakokukakunin-detail-tbody');
+    var countEl = document.getElementById('dakokukakunin-detail-resultcount');
+    countEl.textContent = '読み込み中…';
+    tbody.innerHTML = '';
+    ensureShainRowsLoaded_(function(){
+      var shain = SHAIN_ROWS.find(function(s){ return s.name === name; });
+      if (!shain) { countEl.textContent = '対象社員のメールアドレスが見つかりませんでした。'; return; }
+      fetch(portalApiUrl_('portalDakokuKakuninDetail', { email: shain.email, label: label }))
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+          if (!data.success) { countEl.textContent = data.error || '詳細の取得に失敗しました。'; return; }
+          var rows = data.rows || [];
+          tbody.innerHTML = rows.map(function(r){
+            var mismatch = (r.shukkinRaw && r.shukkinShuukei && r.shukkinRaw !== r.shukkinShuukei) ||
+              (r.taikinRaw && r.taikinShuukei && r.taikinRaw !== r.taikinShuukei);
+            var rowStyle = mismatch ? ' style="background:#FFF2CC;"' : '';
+            return '<tr' + rowStyle + '>' +
+              '<td class="mono">' + escapeHtml(r.date) + '</td>' +
+              '<td class="mono">' + escapeHtml(r.dow) + '</td>' +
+              '<td class="mono">' + escapeHtml(r.shukkinRaw || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.shukkinShuukei || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.taikinRaw || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.taikinShuukei || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.gaishutsu || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.workMin || '—') + '</td>' +
+              '<td class="mono">' + escapeHtml(r.zangyouMin || '—') + '</td>' +
+              '<td class="txtleft">' + escapeHtml(r.biko || '') + '</td>' +
+            '</tr>';
+          }).join('');
+          document.getElementById('dakokukakunin-detail-emptystate').hidden = rows.length > 0;
+          countEl.textContent = rows.length + ' 日分';
+        })
+        .catch(function(){ countEl.textContent = '通信エラーが発生しました。'; });
+    });
   }
 
   document.getElementById('fk-name').addEventListener('change', function(e){ kState.name = e.target.value; renderDakokuKakuninTable(); });
