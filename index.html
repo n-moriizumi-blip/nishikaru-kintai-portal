@@ -75,9 +75,12 @@
   .rail .brand .tx{font-family:var(--display); font-weight:900; font-size:11.5px; line-height:1.5; color:var(--rail-ink);}
   .rail .brand .tx small{display:block; font-size:9px; color:var(--rail-dim); font-family:var(--body); font-weight:700;}
   .rail nav{display:flex; flex-direction:column; gap:3px;}
-  .rail button{display:flex; align-items:center; gap:13px; background:none; border:none; color:var(--rail-dim);
+  .rail button{position:relative; display:flex; align-items:center; gap:13px; background:none; border:none; color:var(--rail-dim);
     font-family:var(--body); font-size:13px; font-weight:700; padding:10px 9px; border-radius:7px; cursor:pointer;
     text-align:left; white-space:nowrap; width:200px;}
+  /* 2026-10-29新設：申請一覧・修正依頼タブの承認待ち件数バッジ（赤丸＋件数） */
+  .navbadge{margin-left:auto; min-width:17px; height:17px; padding:0 5px; border-radius:999px;
+    background:#D93025; color:#fff; font-size:10.5px; font-weight:800; line-height:17px; text-align:center; flex-shrink:0;}
   .rail button .ic{width:18px; text-align:center; font-size:14px; flex-shrink:0; filter:grayscale(1); opacity:.6;}
   .rail button.active{background:var(--rail-field); color:var(--rail-ink);}
   .rail button.active .ic{filter:none; opacity:1;}
@@ -590,8 +593,8 @@
     <div class="fiscalyear"><span class="ic">📅</span><select id="fiscalyear-select" class="fiscalyear-select"><option value="">現在の年度</option></select></div>
     <nav>
       <button class="active" data-nav="home"><span class="ic">🏠</span>ホーム</button>
-      <button data-nav="shinsei"><span class="ic">📋</span>申請一覧</button>
-      <button data-nav="shusei"><span class="ic">🛠️</span>修正依頼</button>
+      <button data-nav="shinsei"><span class="ic">📋</span>申請一覧<span class="navbadge hidden" id="navbadge-shinsei"></span></button>
+      <button data-nav="shusei"><span class="ic">🛠️</span>修正依頼<span class="navbadge hidden" id="navbadge-shusei"></span></button>
       <button data-nav="dakoku"><span class="ic">🕒</span>打刻ログ</button>
       <button data-nav="shuukei"><span class="ic">📊</span>36協定</button>
       <button data-nav="yukyu"><span class="ic">🏖️</span>有給管理</button>
@@ -3637,6 +3640,26 @@
     setInterval(pollPortalDataVersions_, 30000);
   }
 
+  // 2026-10-29新設：左ナビの「申請一覧」「修正依頼」に承認待ち件数の赤丸バッジを出す。
+  // startTabAutoRefresh_（上記）は「今表示中のタブの間だけ」更新される仕組みのため、
+  // 他のタブを見ている間もバッジを最新に保てるよう、タブ非依存の独立したポーリングにする
+  // （件数だけの軽量API、mode=portalPendingCounts）
+  function updateNavBadge_(id, count){
+    var el = document.getElementById(id);
+    el.hidden = !(count > 0);
+    el.textContent = count > 99 ? '99+' : String(count);
+  }
+  function loadPendingCounts_(){
+    fetch(portalApiUrl_('portalPendingCounts'))
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (!data.success) return;
+        updateNavBadge_('navbadge-shinsei', data.shinsei || 0);
+        updateNavBadge_('navbadge-shusei', data.shusei || 0);
+      })
+      .catch(function(){});
+  }
+
   // ── 管理操作（スプレッドシートのメニュー「⚙️ 勤怠管理」と同じ処理をポータンから。
   // 2026-10-19新設） ──
   function postAdminAction_(action, extra, btn){
@@ -3698,6 +3721,8 @@
         initDeepLinkFromUrl_();
         startHomeAutoRefresh_();
         startAllTabAutoRefresh_();
+        loadPendingCounts_();
+        setInterval(loadPendingCounts_, 60000);
         prefetchOtherTabs_();
         // ログイン後45分おきに先回りでトークンを裏側更新し、1時間の失効時間切れを
         // そもそも起こしにくくする（失効してしまった場合もTokenRefresh.wait()側が拾う）
