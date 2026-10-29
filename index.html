@@ -161,6 +161,9 @@
   /* 2026-10-29新設：打刻確認で1人に絞り込んだ時だけ出す備考の詳細（出張届の申請ID・残業実績
      時間・休憩外出控除の内訳等）。短いステータスと見分けやすいよう控えめなサイズ・色にする */
   .dk-biko-detail{font-size:10.5px; color:var(--dim); margin-top:2px; white-space:normal;}
+  /* 2026-10-29新設：打刻確認の1人絞り込み詳細テーブル、期間合計行（スプレッドシートの
+     「週合計」行と同じ考え方で太字・薄い青背景にして目立たせる） */
+  .dk-detail-total td{background:#D9E2F3; font-weight:bold;}
   /* マス目が社員ごとにバラバラな幅になって不揃いに見えていたため（備考列の文字数で
      列幅が社員ごとに変わってしまっていた）、colgroupで列幅を固定して揃える */
   #dakokukakunin-table{table-layout:fixed; width:auto;}
@@ -3215,6 +3218,16 @@
               '<td class="txtleft">' + escapeHtml(r.biko || '') + '</td>' +
             '</tr>';
           }).join('');
+          // 2026-10-29新設：期間合計（実働時間検算シートの「週合計」行と同じ考え方。
+          // こちらは週ではなく画面表示中の期間全体〈通常は月〉の合計）
+          if (rows.length > 0) {
+            tbody.innerHTML += '<tr class="dk-detail-total">' +
+              '<td colspan="7" class="txtleft">合計</td>' +
+              '<td class="mono">' + escapeHtml(data.totalWorkMin || '0:00') + '</td>' +
+              '<td class="mono">' + escapeHtml(data.totalZangyouMin || '0:00') + '</td>' +
+              '<td></td>' +
+            '</tr>';
+          }
           document.getElementById('dakokukakunin-detail-emptystate').hidden = rows.length > 0;
           countEl.textContent = rows.length + ' 日分';
         })
