@@ -891,7 +891,7 @@
       </div>
       <!-- 2026-10-29新設：氏名を1人に絞り込んだ時だけ表示する詳細テーブル（スプレッドシートの
            「実働時間検算」シートと同じ列構成を、その場で計算して表示する。書き込みは行わない） -->
-      <div id="dakokukakunin-detail" class="hidden" style="margin-top:18px;">
+      <div id="dakokukakunin-detail" hidden style="margin-top:18px;">
         <h2 style="font-size:15px; margin:0 0 6px;">詳細（出勤・退勤の実打刻／集計用、外出・帰社、実働・残業時間）</h2>
         <div style="font-size:12px; color:var(--dim); margin:-2px 0 8px 2px;">💡 実打刻と集計用の時刻が異なる行（黄色）＝何らかの補正がかかった日です。</div>
         <p class="resultcount" id="dakokukakunin-detail-resultcount"></p>
@@ -3178,13 +3178,12 @@
     // 確定するようにしたため、ここでのJS測定・設定は不要になった
 
     // 2026-10-29新設：1人に絞り込んだ時だけ、実働時間検算シートと同じ構成の詳細テーブルを表示
+    // 2026-10-29修正：このファイルの他のタブはすべてネイティブのhidden属性（el.hidden）で
+    // 表示/非表示を切り替えており、「hidden」というCSSクラス自体は定義されていない
+    // （classList.add('hidden')では見た目が一切変わらなかった。ユーザー指摘で発覚）
     var detailEl = document.getElementById('dakokukakunin-detail');
-    if (pickedIdx !== -1) {
-      detailEl.classList.remove('hidden');
-      loadDakokuKakuninDetail_(allNames[pickedIdx], kState.label);
-    } else {
-      detailEl.classList.add('hidden');
-    }
+    detailEl.hidden = (pickedIdx === -1);
+    if (pickedIdx !== -1) loadDakokuKakuninDetail_(allNames[pickedIdx], kState.label);
   }
 
   // 氏名→メールアドレスの変換に社員マスタ（SHAIN_ROWS）を使う。未読み込みならここで取得する
