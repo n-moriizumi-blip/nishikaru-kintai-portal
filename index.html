@@ -3281,10 +3281,12 @@
   // HOME_CATS：各行のタグ（色・文字）用の元カテゴリ。bulkは「まとめて確認する」の
   // 遷移先（氏名で絞らず状況のみで絞り込む）。承認/否認ボタンを持つタブ（申請一覧・
   // 修正依頼）だけに持つ
+  // 2026-10-29変更：打刻ミスを申請なしより前（承認待ちの直下）に並べる（ユーザー指定）。
+  // このオブジェクトの定義順が「まとめて確認する」ボタンの並び順にそのまま使われる
   var HOME_CATS = {
     approve: { label:'承認待ち', bulk:{ tab:'shinsei', opts:{ status:'承認待' }, bulkLabel:'申請一覧' } },
-    missing: { label:'申請なし', bulk:null },
     mistake: { label:'打刻ミス', bulk:{ tab:'shusei',  opts:{ status:'承認待' }, bulkLabel:'修正依頼' } },
+    missing: { label:'申請なし', bulk:null },
     // 2026-10-21追加：承認済だが実績とのズレが検知された申請（flagShinseiNeedsReview_の
     // 【要確認】マーカー）。以前は「承認待ち」グループに混ぜていたが、実際には既に承認済の
     // 申請なので「未承認でまだ何も判断していない」ものと一緒くたにするのは紛らわしいという
@@ -3352,15 +3354,8 @@
         jump    : function(){ jumpToTab('shinsei', r.name, { status: '承認待' }); },
       });
     });
-    data.nashi.current.concat(data.nashi.prev).forEach(function(r){
-      if (r.resolved === '済') return; // 解消済みは対応不要なので一覧に出さない
-      items.push({
-        category: 'missing', name: r.name,
-        detail  : r.dateStr + 'の' + r.content,
-        meta    : daysAgoLabel_(r.dateStr),
-        jump    : function(){ jumpToTab('dakoku', r.name, { date: r.dateStr.replace(/\//g, '-') }); },
-      });
-    });
+    // 2026-10-29新設：打刻ミス（修正依頼の承認待ち）は承認待ちの直下に表示する（ユーザー指定）。
+    // 申請なしより先に処理する
     data.shusei.current.concat(data.shusei.prev).forEach(function(r){
       // 2026-10-21追加：承認済だが打刻ログへ自動反映できなかった行（r.autoResultが
       // ✅で始まらない）も対象のため、一覧の文言でそれと分かるようにする
@@ -3371,6 +3366,15 @@
         detail  : isUnresolved ? (r.content + '（承認済みだが打刻ログへ未反映：' + r.autoResult + '）') : r.content,
         meta    : elapsedLabel_(r.appDateTime),
         jump    : function(){ jumpToTab('shusei', r.name); },
+      });
+    });
+    data.nashi.current.concat(data.nashi.prev).forEach(function(r){
+      if (r.resolved === '済') return; // 解消済みは対応不要なので一覧に出さない
+      items.push({
+        category: 'missing', name: r.name,
+        detail  : r.dateStr + 'の' + r.content,
+        meta    : daysAgoLabel_(r.dateStr),
+        jump    : function(){ jumpToTab('dakoku', r.name, { date: r.dateStr.replace(/\//g, '-') }); },
       });
     });
     return items;
