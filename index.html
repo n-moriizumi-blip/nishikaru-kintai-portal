@@ -466,6 +466,15 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
   .toast.err{background:var(--denied);}
 
+  /* ── 通信中の読み込みバー（2026-11-12新設） ── */
+  .loadingbar{position:fixed; top:0; left:0; width:100%; height:3px; z-index:9999;
+    overflow:hidden; opacity:0; transition:opacity .15s ease; pointer-events:none;}
+  .loadingbar.show{opacity:1;}
+  .loadingbar .bar{position:absolute; top:0; left:-35%; height:100%; width:35%;
+    background:linear-gradient(90deg, transparent, var(--rail-accent) 50%, transparent);
+    animation:loadingbar-sweep 1.1s ease-in-out infinite;}
+  @keyframes loadingbar-sweep{0%{left:-35%;} 100%{left:100%;}}
+
   /* ── 使い方ガイド（2026-10-20新設） ── */
   html{scroll-behavior:smooth;}
   .guide-layout{display:flex; align-items:flex-start; gap:28px;}
@@ -1304,11 +1313,30 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="loadingbar" id="loadingbar"><div class="bar"></div></div>
 
 <script>
 (function(){
   var GAS_URL = 'https://script.google.com/a/macros/nishikaru.co.jp/s/AKfycbzht6wuAjcOKeiGL20sHIEE1ip10b7haJfb5lFNahg7XN-ZBKZtwhxE3sfPhydCA21xYg/exec';
   var idToken = null, myEmail = '', myName = '';
+
+  // ── 通信中の読み込みバー（2026-11-12新設） ──
+  // GAS_URLへのfetch()が1件以上進行中の間、上部にラインが流れるバーを表示する。
+  // 呼び出し元（約20箇所）を個別に直す代わりに、fetchそのものを差し替えて一括対応する。
+  (function(){
+    var barEl = document.getElementById('loadingbar');
+    var inFlight = 0;
+    function show(){ inFlight++; if (barEl) barEl.classList.add('show'); }
+    function hide(){ inFlight = Math.max(0, inFlight - 1); if (inFlight === 0 && barEl) barEl.classList.remove('show'); }
+    var nativeFetch = window.fetch;
+    window.fetch = function(url, opts){
+      var isGas = typeof url === 'string' && url.indexOf(GAS_URL) === 0;
+      if (isGas) show();
+      var p = nativeFetch.call(window, url, opts);
+      if (isGas) p = p.finally(hide);
+      return p;
+    };
+  })();
 
   // ── ログインの自動延長（2026-10-19新設） ──
   // GoogleのIDトークンは約1時間で失効する。タブを開いたまま長時間操作すると
