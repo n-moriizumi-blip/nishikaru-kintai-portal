@@ -67,8 +67,11 @@
   .rail{background:var(--rail); border-right:1px solid #16293A; overflow:hidden; width:64px; transition:width .16s ease;
     position:fixed; top:0; left:0; bottom:0; z-index:50;}
   .rail:hover{width:220px; box-shadow:6px 0 22px rgba(0,0,0,.22);}
-  .rail-inner{width:220px; padding:16px 10px; height:100%; display:flex; flex-direction:column;}
-  .rail .brand{display:flex; align-items:center; gap:10px; padding:0 8px; margin-bottom:22px; white-space:nowrap;}
+  /* 2026-11-16調整：12個のナビボタンが画面の高さに入りきらずスクロールが必要になる
+     指摘を受け、周囲の余白（レール内側の上下パディング・ブランド/年度選択の下マージン）を
+     詰めて、ナビに回せる高さを増やした */
+  .rail-inner{width:220px; padding:10px 10px; height:100%; display:flex; flex-direction:column;}
+  .rail .brand{display:flex; align-items:center; gap:10px; padding:0 8px; margin-bottom:12px; white-space:nowrap; flex-shrink:0;}
   .rail .brand .mark{width:30px; height:30px; border-radius:6px; background:var(--rail-field); border:1px solid rgba(255,255,255,.16);
     display:flex; align-items:center; justify-content:center; font-family:var(--display); font-weight:900; font-size:13px; color:var(--rail-accent);
     flex-shrink:0;}
@@ -76,17 +79,15 @@
     display:none; white-space:nowrap;}
   .rail .brand .tx small{display:block; font-size:9px; color:var(--rail-dim); font-family:var(--body); font-weight:700;}
   .rail:hover .brand .tx{display:block;}
-  /* 2026-11-15調整：アイコンを大きくした分、12個のボタンが縦に収まりきらなくなる
-     画面でも全体がスクロールしてしまわないよう、nav自体を残り高さいっぱいに広げ
-     （flex:1）、入りきらない時だけnav内部だけが縦スクロールする作りにした
-     （検査記録ポータルの.rail-nav-scrollと同じ考え方） */
-  .rail nav{display:flex; flex-direction:column; gap:3px; flex:1; min-height:0;
-    overflow-y:auto; overflow-x:hidden;}
-  .rail nav::-webkit-scrollbar{width:5px;}
-  .rail nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18); border-radius:3px;}
+  /* 2026-11-16調整：「スクロールなしで1画面に収まるように」との指示を受け、以前の
+     「nav内部だけスクロール」という安全策ではなくnav自体を一切スクロールさせない方式に
+     変更した。ボタン1つずつにflex:1（+min-height:0でshrink許可）を与え、画面の高さに
+     応じてnav全体がぴったり収まるようボタンの縦の余白が自動で伸縮する（画面が低い時は
+     ボタンが詰まり、高い時はゆったりする。アイコン自体の大きさは変えない） */
+  .rail nav{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow:hidden;}
   .rail button{position:relative; display:flex; align-items:center; gap:13px; background:none; border:none; color:var(--rail-dim);
-    font-family:var(--body); font-size:13.5px; font-weight:700; padding:12px 9px; border-radius:7px; cursor:pointer;
-    text-align:left; white-space:nowrap; width:200px; flex-shrink:0;}
+    font-family:var(--body); font-size:13.5px; font-weight:700; padding:0 9px; border-radius:7px; cursor:pointer;
+    text-align:left; white-space:nowrap; width:200px; flex:1; min-height:0; max-height:46px;}
   /* 2026-10-29新設：申請一覧・修正依頼タブの承認待ち件数バッジ（赤丸＋件数） */
   .navbadge{margin-left:auto; min-width:17px; height:17px; padding:0 5px; border-radius:999px;
     background:#D93025; color:#fff; font-size:10.5px; font-weight:800; line-height:17px; text-align:center; flex-shrink:0;}
@@ -102,7 +103,7 @@
   .rail:hover button .label{display:inline;}
   /* 2026-11-14新設：レール下部のアカウント表示を検査記録ポータル・西軽精機ナレッジと
      同じ見た目（丸いアバター＋氏名＋メールアドレス）に統一 */
-  .rail .rail-user{margin-top:auto; display:flex; align-items:center; gap:9px; padding:12px 9px 2px;
+  .rail .rail-user{margin-top:auto; flex-shrink:0; display:flex; align-items:center; gap:9px; padding:8px 9px 2px;
     border-top:1px solid rgba(255,255,255,.14);}
   .rail .rail-user .av{width:26px; height:26px; border-radius:50%; background:var(--rail-field); color:var(--rail-accent);
     display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; flex-shrink:0;}
@@ -568,7 +569,7 @@
      ①折りたたみ時はopacity:0で完全に透明にし、レールにカーソルが乗った時だけ見せる。
      ②それだけでは展開時もselect自体が収まりきらず入らなかったため、レール自体の展開幅を
      196px→220pxに広げてselectの実際の幅も確保した（ユーザー指摘：「あまり変化が見られない」） */
-  .rail .fiscalyear{display:flex; align-items:center; gap:13px; padding:0 9px; margin-bottom:14px; white-space:nowrap;}
+  .rail .fiscalyear{display:flex; align-items:center; gap:13px; padding:0 9px; margin-bottom:8px; white-space:nowrap; flex-shrink:0;}
   .rail .fiscalyear .ic{font-size:16px; width:20px; text-align:center; flex-shrink:0;}
   .fiscalyear-select{background:var(--rail-field); color:var(--rail-ink); border:1px solid rgba(255,255,255,.16);
     border-radius:5px; padding:5px 6px; font-size:12px; font-family:var(--body); font-weight:700; width:145px; max-width:145px;
@@ -587,8 +588,8 @@
     .rail{position:sticky; top:0; left:auto; bottom:auto; width:100%; z-index:15;}
     .rail:hover{width:100%; box-shadow:none;}
     .rail-inner{width:100%;}
-    .rail nav{flex-direction:row; overflow-x:auto;}
-    .rail button{width:auto;}
+    .rail nav{flex-direction:row; overflow-x:auto; overflow-y:hidden;}
+    .rail button{width:auto; flex:0 0 auto; max-height:none; padding:8px 9px;}
     .rail .fiscalyear{margin-bottom:8px;}
     .fiscalyear-select{opacity:1;} /* モバイルはレールが常に全幅で折りたたみが無いため、常に表示する */
     .rail button .label{display:inline;}
@@ -638,7 +639,7 @@
       <button data-nav="dakoku"><span class="ic">🕒</span><span class="label">打刻ログ</span></button>
       <button data-nav="shuukei"><span class="ic">📊</span><span class="label">36協定</span></button>
       <button data-nav="yukyu"><span class="ic">🏖️</span><span class="label">有給管理</span></button>
-      <button data-nav="tokubetsu"><span class="ic">🎌</span><span class="label">特別休暇管理</span></button>
+      <button data-nav="tokubetsu"><span class="ic">🎗️</span><span class="label">特別休暇管理</span></button>
       <button data-nav="dengon"><span class="ic">💬</span><span class="label">伝言板</span></button>
       <button data-nav="gesshu"><span class="ic">📅</span><span class="label">月次集計</span></button>
       <button data-nav="shuubetsu"><span class="ic">📆</span><span class="label">週別実働</span></button>
@@ -1018,7 +1019,7 @@
                 <tr><td>🕒 打刻ログ</td><td class="txtleft">全社員の生の打刻記録（出勤・退勤・外出・帰社）を検索する</td><td>閲覧専用</td></tr>
                 <tr><td>📊 36協定</td><td class="txtleft">年間残業累計・36協定の残り・複数月平均などを社員ごとに確認する</td><td>閲覧専用</td></tr>
                 <tr><td>🏖️ 有給管理</td><td class="txtleft">通常有給・積立有給の残日数・消化日数を確認する。新規社員追加直後は今年度付与日数・通常有給残日数・積立有給繰越残の3項目だけ手入力できる</td><td>閲覧＋一部編集</td></tr>
-                <tr><td>🎌 特別休暇管理</td><td class="txtleft">慶弔・傷病等特別休暇・積立有給の申請ごとの消化状況を確認する。備考欄は編集できる</td><td>閲覧＋一部編集</td></tr>
+                <tr><td>🎗️ 特別休暇管理</td><td class="txtleft">慶弔・傷病等特別休暇・積立有給の申請ごとの消化状況を確認する。備考欄は編集できる</td><td>閲覧＋一部編集</td></tr>
                 <tr><td>💬 伝言板</td><td class="txtleft">社員への伝言を確認する</td><td>閲覧＋新規作成</td></tr>
                 <tr><td>📅 月次集計</td><td class="txtleft">月ごとの出勤時間・残業・有給消化等の集計表。「給与じまん入力完了」はクリックで切り替え可能</td><td>閲覧＋一部編集</td></tr>
                 <tr><td>📆 週別実働</td><td class="txtleft">週ごとの実働時間・残業・40h残り等を確認する</td><td>閲覧専用</td></tr>
