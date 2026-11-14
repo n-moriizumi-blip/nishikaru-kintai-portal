@@ -91,10 +91,12 @@
   /* 2026-10-29新設：申請一覧・修正依頼タブの承認待ち件数バッジ（赤丸＋件数） */
   .navbadge{margin-left:auto; min-width:17px; height:17px; padding:0 5px; border-radius:999px;
     background:#D93025; color:#fff; font-size:10.5px; font-weight:800; line-height:17px; text-align:center; flex-shrink:0;}
-  /* 2026-11-15調整：「できる限り大きく」との指示で14px→19pxに拡大 */
-  .rail button .ic{width:24px; text-align:center; font-size:19px; flex-shrink:0; filter:grayscale(1); opacity:.6;}
+  /* 2026-11-15調整：「できる限り大きく」との指示で14px→19pxに拡大
+     2026-11-16調整：以前は選択中のタブだけfilter:none（カラー）で、未選択はgrayscale+薄く
+     表示していた。ユーザー指摘「選ばないと色が付かない」を受け、常にカラー表示に変更。
+     選択中の区別はボタンの背景色（.active）で付ける */
+  .rail button .ic{width:24px; text-align:center; font-size:19px; flex-shrink:0;}
   .rail button.active{background:var(--rail-field); color:var(--rail-ink);}
-  .rail button.active .ic{filter:none; opacity:1;}
   .rail button:hover:not(.active){background:var(--rail-hover); color:var(--rail-ink);}
   /* 2026-11-14新設：閉じている間はアイコンだけ見せる（西軽精機ナレッジと同じ方式）。
      以前はラベルが生の文字のまま64px幅の.railにoverflow:hiddenでクリップされる作りで、
