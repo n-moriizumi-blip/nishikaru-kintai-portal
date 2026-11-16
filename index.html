@@ -420,10 +420,16 @@
   .actionbtn .actionbtn-num{font-family:var(--mono); font-size:15px; font-weight:700; color:#fff;
     background:var(--rail); border-radius:999px; padding:3px 10px; letter-spacing:.02em;}
 
-  .feedrow{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:flex-start; gap:14px; width:100%;
+  .feedrow{box-sizing:border-box; display:flex; align-items:flex-start; gap:10px; width:100%;
     padding:12px 18px; border-bottom:1px solid var(--field);}
   .feedrow:last-child{border-bottom:none;}
   .feedrow:hover{background:var(--bg);}
+  /* 2026-11-16調整：行全体が1個の<button>だった構成を、クリック領域（.feedrow-main）と
+     「対応済みにする」ボタン（.feedrow-resolve）を横に並べる構成へ変更した（ボタンの中に
+     ボタンは置けないため）。見た目・クリック範囲は従来のfeedrowと同じになるよう
+     .feedrow-mainに元のfeedrowのスタイルをそのまま移した */
+  .feedrow-main{all:unset; cursor:pointer; box-sizing:border-box; display:flex; align-items:flex-start; gap:14px;
+    flex:1; min-width:0;}
   .feedtag{flex:0 0 84px; font-size:10.5px; font-weight:700; text-align:center; padding:3px 0; border-radius:3px; color:#fff;}
   .feedname{flex:0 0 100px; font-size:13px; font-weight:700; color:var(--ink); padding-top:3px;}
   /* 2026-10-21修正：要確認の文言（検知内容の詳細込み）が1行に収まらず見切れていたため、
@@ -432,6 +438,12 @@
     white-space:normal; word-break:break-word; padding-top:2px;}
   .feedmeta{flex:0 0 auto; font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--dim); padding-top:3px;}
   .feedarrow{flex:0 0 auto; color:var(--line); font-size:13px; padding-top:1px;}
+  /* 2026-11-16新設：「申請なし◯◯」のうち、申請の有無では自動解消しない仕様のもの
+     （例：全休申請ありなのに出勤）を、総務が実態確認後に手動で一覧から消せるボタン */
+  .feedrow-resolve{flex:0 0 auto; align-self:center; font-size:10.5px; font-weight:700; color:var(--dim);
+    background:var(--field); border:1px solid var(--line); border-radius:5px; padding:5px 8px; cursor:pointer;
+    white-space:nowrap; font-family:var(--body);}
+  .feedrow-resolve:hover{background:var(--rail); color:var(--rail-ink); border-color:var(--rail);}
 
   /* ── 注意リスト（有給残少・残業注意。2026-10-18、対応が必要な一覧とは切り離した。
      承認・否認のような「処理すれば終わる」ものではなく、状況を把握するための監視情報
@@ -2242,6 +2254,32 @@
       });
   }
 
+  // 2026-11-16新設：ホーム画面「対応が必要な一覧」の「申請なし◯◯」のうち、申請の有無では
+  // 自動解消しない仕様のもの（全休申請ありなのに出勤、等）を手動で消す。doMarkShuseiResolvedと
+  // 同じ考え方（打刻ログの備考欄自体は変更せず、表示上のフラグだけを立てる）
+  function doMarkNashiResolved(logId, name, dateStr){
+    if (busy) return;
+    if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+    if (!confirm(dateStr + 'の' + name + 'さんの一覧項目を、対応済みとして消しますか？\n（実態を確認・是正済みの場合のみ押してください。打刻ログの備考欄自体は変更されません）')) return;
+    busy = true;
+    setButtonsDisabled(true);
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'markNashiResolved', token: idToken, logId: logId })
+    })
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        busy = false; setButtonsDisabled(false);
+        if (!data.success) { showToast(data.message || '処理に失敗しました。', true); return; }
+        showToast('対応済みにしました：' + name + '（' + dateStr + '）');
+        loadHomeSummary();
+      })
+      .catch(function(){
+        busy = false; setButtonsDisabled(false);
+        showToast('通信エラーが発生しました。', true);
+      });
+  }
+
   document.getElementById('shusei-tbody').addEventListener('click', function(e){
     var actBtn = e.target.closest('[data-act]');
     if (actBtn){
@@ -3445,6 +3483,10 @@
         detail  : r.dateStr + 'の' + r.content,
         meta    : daysAgoLabel_(r.dateStr),
         jump    : function(){ jumpToTab('dakoku', r.name, { date: r.dateStr.replace(/\//g, '-') }); },
+        // 2026-11-16新設：「全休申請ありなのに出勤」等、申請の有無では自動解消しない仕様の
+        // ものだけ「対応済みにする」ボタンを出す（logIdが無い「無申請（打刻なし）」は
+        // 対応する打刻ログ行が無いため対象外。既存の自動解消の仕組みに任せる）
+        resolve : r.logId ? function(){ doMarkNashiResolved(r.logId, r.name, r.dateStr); } : null,
       });
     });
     return items;
@@ -3562,16 +3604,30 @@
     var wrap = document.getElementById('home-feed-rows');
     wrap.innerHTML = '';
     rows.forEach(function(it){
-      var row = document.createElement('button');
-      row.type = 'button';
+      var row = document.createElement('div');
       row.className = 'feedrow';
-      row.innerHTML =
+      var main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'feedrow-main';
+      main.innerHTML =
         '<span class="feedtag cat-' + it.category + '">' + escapeHtml(HOME_CATS[it.category].label) + '</span>' +
         '<span class="feedname">' + escapeHtml(it.name) + '</span>' +
         '<span class="feeddetail">' + escapeHtml(it.detail) + '</span>' +
         '<span class="feedmeta">' + escapeHtml(it.meta || '') + '</span>' +
         '<span class="feedarrow">→</span>';
-      row.addEventListener('click', it.jump);
+      main.addEventListener('click', it.jump);
+      row.appendChild(main);
+      // 2026-11-16新設：「全休申請ありなのに出勤」等、自動では消えない一覧項目を
+      // 手動で消せるボタン（it.resolveがある項目だけ表示）
+      if (it.resolve) {
+        var rbtn = document.createElement('button');
+        rbtn.type = 'button';
+        rbtn.className = 'feedrow-resolve';
+        rbtn.textContent = '対応済みにする';
+        rbtn.title = '実態を確認済みで、今後この一覧に表示させたくない場合に押してください';
+        rbtn.addEventListener('click', function(ev){ ev.stopPropagation(); it.resolve(); });
+        row.appendChild(rbtn);
+      }
       wrap.appendChild(row);
     });
     document.getElementById('home-feed-empty').hidden = rows.length > 0;
