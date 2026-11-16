@@ -202,6 +202,13 @@
      列幅が社員ごとに変わってしまっていた）、colgroupで列幅を固定して揃える */
   #dakokukakunin-table{table-layout:fixed; width:auto;}
   #dakokukakunin-table td, #dakokukakunin-table th{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  /* 2026-11-16新設：1人に絞り込むとテーブル自体は狭くなるのに、枠（.sheet）側は常に
+     親要素いっぱいの幅のままだったため、右側に大きな空白ができ、縦スクロールバーも
+     その空白の中（テーブルから離れた位置）に表示されてしまっていた（ユーザー指摘）。
+     枠の幅をテーブルの実際の幅に合わせ、かつ全員表示時（テーブルが広い）は親要素の幅で
+     頭打ちにする。1人絞り込み時はJS側（renderDakokuKakuninTable）で高さも縮める */
+  #dakokukakunin-sheet{width:fit-content; max-width:100%;}
+  #dakokukakunin-sheet.sheet-compact{max-height:320px;}
   /* ── 月次集計・週別実働：氏名列を横スクロールでも固定表示 ── */
   .stickyname{position:sticky; left:0; z-index:1; background:var(--panel); border-right:1.5px solid #999999;}
   .stickyname-head{position:sticky; left:0; z-index:4; border-right:1.5px solid #16293A;}
@@ -947,7 +954,7 @@
       </div>
       <div style="font-size:12px; color:var(--dim); margin:-2px 0 8px 2px;">💡 社員数が多く見づらい時は、「氏名」で1人だけに絞り込むと見やすくなります。</div>
       <p class="resultcount" id="dakokukakunin-resultcount"></p>
-      <div class="sheet">
+      <div class="sheet" id="dakokukakunin-sheet">
         <table id="dakokukakunin-table">
           <colgroup id="dakokukakunin-colgroup"></colgroup>
           <thead id="dakokukakunin-thead"></thead>
@@ -3317,6 +3324,9 @@
     // （classList.add('hidden')では見た目が一切変わらなかった。ユーザー指摘で発覚）
     var detailEl = document.getElementById('dakokukakunin-detail');
     detailEl.hidden = (pickedIdx === -1);
+    // 2026-11-16新設：1人に絞り込んだ時だけ、上のカレンダー枠（全員表示では広い縦スクロールが
+    // 要る）も検算詳細・有給増減履歴と同じ高さ（320px）に縮める。全員表示時は元の70vhのまま
+    document.getElementById('dakokukakunin-sheet').classList.toggle('sheet-compact', pickedIdx !== -1);
     if (pickedIdx !== -1) loadDakokuKakuninDetail_(allNames[pickedIdx], kState.label);
   }
 
