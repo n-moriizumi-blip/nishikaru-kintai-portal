@@ -963,6 +963,17 @@
           </table>
           <div class="emptystate" id="dakokukakunin-detail-emptystate" hidden>この期間の打刻がありません。</div>
         </div>
+        <!-- 2026-11-16新設：この社員の有給増減履歴（通常有給・積立有給、今年度分）。
+             「いつ・何で残日数が変わったか」を直接確認できるようにする（荻原さんの件の再発防止） -->
+        <h2 style="font-size:15px; margin:18px 0 6px;">有給増減履歴（通常有給・積立有給、今年度分）</h2>
+        <div style="font-size:12px; color:var(--dim); margin:-2px 0 8px 2px;">💡 残日数は変化があった時だけ記録されます。今年度のスプレッドシートに記録が無い期間（この仕組みの導入前）は表示されません。</div>
+        <div class="sheet">
+          <table>
+            <thead><tr><th>日時</th><th>種別</th><th>契機</th><th>増減</th><th>変更前→変更後</th><th>申請ID</th></tr></thead>
+            <tbody id="dakokukakunin-yukyuhistory-tbody"></tbody>
+          </table>
+          <div class="emptystate" id="dakokukakunin-yukyuhistory-emptystate" hidden>記録がありません。</div>
+        </div>
       </div>
     </div>
     <div id="page-shain" hidden>
@@ -3347,6 +3358,22 @@
           }
           document.getElementById('dakokukakunin-detail-emptystate').hidden = rows.length > 0;
           countEl.textContent = rows.length + ' 日分';
+
+          // 2026-11-16新設：有給増減履歴（通常有給・積立有給、今年度分）
+          var hTbody = document.getElementById('dakokukakunin-yukyuhistory-tbody');
+          var hRows = data.yukyuHistory || [];
+          hTbody.innerHTML = hRows.map(function(r){
+            var sign = r.zougen && r.zougen.charAt(0) === '+' ? 'color:#2E7D32;' : 'color:#B23B3B;';
+            return '<tr>' +
+              '<td class="mono">' + escapeHtml(r.datetime) + '</td>' +
+              '<td>' + escapeHtml(r.shubetsu) + '</td>' +
+              '<td>' + escapeHtml(r.kikkake) + '</td>' +
+              '<td class="mono" style="' + sign + 'font-weight:700;">' + escapeHtml(r.zougen) + '</td>' +
+              '<td class="mono">' + fmtDay_(r.before) + ' → ' + fmtDay_(r.after) + '</td>' +
+              '<td class="mono">' + escapeHtml(r.appId || '—') + '</td>' +
+            '</tr>';
+          }).join('');
+          document.getElementById('dakokukakunin-yukyuhistory-emptystate').hidden = hRows.length > 0;
         })
         .catch(function(){ countEl.textContent = '通信エラーが発生しました。'; });
     });
