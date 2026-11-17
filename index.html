@@ -3536,11 +3536,11 @@
     });
     // 2026-11-17新設：承認待ち（approve）はdata.pendingを1件ずつ見てreview（要確認）との
     // 振り分けをその場で行っていたため、元データの並び順のまま承認待ち・要確認が交互に
-    // 出てしまっていた（ユーザー指摘：スクショで見ると分かりにくい）。カテゴリの並び順
-    // （承認待ち→打刻ミス→要確認→申請なし、HOME_GROUPSの表示順と同じ）でまとめて
-    // ソートし直す。各カテゴリ内の順序（元データの並び＝だいたい申請日時順）は変えない
+    // 出てしまっていた（ユーザー指摘：スクショで見ると分かりにくい）。カテゴリ単位で
+    // まとめてソートし直す（表示順は打刻ミス→承認待ち→要確認→申請なし、ユーザー指定）。
+    // 各カテゴリ内の順序（元データの並び＝だいたい申請日時順）は変えない
     // （Array.prototype.sortは安定ソートのため、同じ順位同士は入れ替わらない）
-    var CATEGORY_ORDER = { approve: 0, mistake: 1, review: 2, missing: 3 };
+    var CATEGORY_ORDER = { mistake: 0, approve: 1, review: 2, missing: 3 };
     items.sort(function(a, b){ return CATEGORY_ORDER[a.category] - CATEGORY_ORDER[b.category]; });
     return items;
   }
