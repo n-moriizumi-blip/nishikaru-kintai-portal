@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>勤怠管理ポータル（西軽精機）</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#1F3A52">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,6 +51,8 @@
   .logincard .lhead .mark{width:40px; height:40px; border-radius:8px; background:var(--rail-field); margin:0 auto 10px;
     display:flex; align-items:center; justify-content:center; font-family:var(--display); font-weight:900; font-size:17px;
     color:var(--rail-accent);}
+  /* 2026-11-22新設：QMSポータルと同じく、テキストの代わりに実際のアプリアイコン（ウサギ）を表示 */
+  img.mark{background:transparent; object-fit:contain; padding:0;}
   .logincard .lhead h1{font-family:var(--display); font-weight:900; font-size:16px; margin:0 0 4px;}
   .logincard .lhead p{font-size:12px; color:var(--rail-dim); margin:0;}
   .logincard .lbody{padding:22px 20px; display:flex; flex-direction:column; align-items:center; gap:14px;}
@@ -634,7 +637,7 @@
 <div id="loginScreen">
   <div class="logincard">
     <div class="lhead">
-      <div class="mark">西</div>
+      <img class="mark" src="icon-192.png" alt="">
       <h1>勤怠管理ポータル</h1>
       <p>西軽精機・総務課専用</p>
     </div>
@@ -656,7 +659,7 @@
 <div class="app" id="app">
   <div class="rail-spacer"></div>
   <div class="rail"><div class="rail-inner">
-    <div class="brand"><div class="mark">西</div><div class="tx">勤怠管理<br>ポータル<small>西軽精機・総務課</small></div></div>
+    <div class="brand"><img class="mark" src="icon-192.png" alt=""><div class="tx">勤怠管理<br>ポータル<small>西軽精機・総務課</small></div></div>
     <div class="fiscalyear"><span class="ic">📅</span><select id="fiscalyear-select" class="fiscalyear-select"><option value="">現在の年度</option></select></div>
     <nav>
       <button class="active" data-nav="home"><span class="ic">🏠</span><span class="label">ホーム</span></button>
