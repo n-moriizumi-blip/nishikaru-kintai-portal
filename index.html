@@ -266,6 +266,31 @@
   .rb.stop:hover{border-color:var(--denied); color:var(--denied);}
   .rb.back:hover{border-color:var(--pending); color:var(--pending);}
 
+  /* ── 一括承認（2026-11-26新設） ── */
+  .ckcol{width:34px;}
+  input.rowck, input.headck{width:16px; height:16px; accent-color:var(--rail-accent); cursor:pointer;}
+  tbody tr.ckselected{outline:2px solid var(--rail-accent); outline-offset:-2px;}
+  .bulkbar-wrap{min-height:50px; display:flex; align-items:flex-start; justify-content:center; margin-top:12px;}
+  .bulkbar{display:flex; align-items:center; gap:14px; background:var(--rail); color:var(--rail-ink); border-radius:999px;
+    padding:9px 9px 9px 18px; box-shadow:0 8px 20px rgba(0,0,0,.2); font-size:13px;
+    opacity:0; transform:translateY(-6px); pointer-events:none; transition:opacity .15s ease, transform .15s ease;}
+  .bulkbar.show{opacity:1; transform:translateY(0); pointer-events:auto;}
+  .bulkbar .cnt{font-weight:700; color:var(--rail-accent); font-family:var(--mono);}
+  .bulkbar button{font-family:var(--body); font-weight:700; font-size:12.5px; border-radius:999px; padding:7px 15px; border:none; cursor:pointer;}
+  .bulkbar .bulk-approve{background:var(--rail-accent); color:#241A04;}
+  .bulkbar .bulk-approve:disabled{opacity:.6; cursor:default;}
+  .bulkbar .bulk-clear{background:transparent; color:var(--rail-ink); opacity:.75; padding:7px 10px;}
+  .bulk-modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity .15s ease;}
+  .bulk-modal-backdrop.show{opacity:1; pointer-events:auto;}
+  .bulk-modal{width:100%; max-width:340px; background:var(--panel); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.3); padding:20px 18px;}
+  .bulk-modal h3{font-family:var(--display); font-weight:900; font-size:14px; color:var(--rail); margin:0 0 10px;}
+  .bulk-modal ul{margin:0 0 14px; padding-left:18px; font-size:12.5px; line-height:1.9; color:var(--ink); max-height:200px; overflow-y:auto;}
+  .bulk-modal ul li b{font-family:var(--mono);}
+  .bulk-modal .mbtns{display:flex; gap:8px;}
+  .bulk-modal button{flex:1; padding:10px 0; border-radius:7px; font-size:12.5px; font-weight:700; font-family:var(--body); border:1px solid var(--line); background:var(--field); color:var(--dim); cursor:pointer;}
+  .bulk-modal button.primary{background:var(--approved); border-color:var(--approved); color:#06241A;}
+  .bulk-modal button:disabled{opacity:.6; cursor:default;}
+
   /* ── 詳細ドロワー ── */
   .drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:20; opacity:0; pointer-events:none;
     transition:opacity .15s ease;}
@@ -790,11 +815,16 @@
 
       <div class="sheet">
         <table>
-          <thead><tr><th>ID</th><th>氏名</th><th>種別</th><th>種別・内容</th><th>対象日</th><th>事前/事後</th><th>判定</th><th>実績確認</th><th>操作</th></tr></thead>
+          <thead><tr><th class="ckcol"><input type="checkbox" id="shinsei-headck"></th><th>ID</th><th>氏名</th><th>種別</th><th>種別・内容</th><th>対象日</th><th>事前/事後</th><th>判定</th><th>実績確認</th><th>操作</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="emptystate" id="emptystate" hidden>条件に一致する申請がありません。</div>
       </div>
+      <div class="bulkbar-wrap"><div class="bulkbar" id="shinsei-bulkbar">
+        <span><span class="cnt">0件</span>　選択中</span>
+        <button class="bulk-approve" data-group="shinsei">まとめて承認する</button>
+        <button class="bulk-clear" data-group="shinsei">選択解除</button>
+      </div></div>
     </div>
 
     <div id="page-shusei" hidden>
@@ -823,10 +853,16 @@
       <p class="resultcount" id="shusei-resultcount"></p>
       <div class="sheet">
         <table>
-          <thead><tr><th>ID</th><th>氏名</th><th>内容</th><th>対象日</th><th>正しい時刻</th><th>判定</th><th>打刻ログ反映</th><th>操作</th></tr></thead>
+          <thead><tr><th class="ckcol"><input type="checkbox" id="shusei-headck"></th><th>ID</th><th>氏名</th><th>内容</th><th>対象日</th><th>時刻（現在→修正後）</th><th>判定</th><th>打刻ログ反映</th><th>操作</th></tr></thead>
           <tbody id="shusei-tbody"></tbody>
         </table>
         <div class="emptystate" id="shusei-emptystate" hidden>条件に一致する修正依頼がありません。</div>
+      </div>
+      <div class="bulkbar-wrap"><div class="bulkbar" id="shusei-bulkbar">
+        <span><span class="cnt">0件</span>　選択中</span>
+        <button class="bulk-approve" data-group="shusei">まとめて承認する</button>
+        <button class="bulk-clear" data-group="shusei">選択解除</button>
+      </div></div>
       </div>
     </div>
 
@@ -1268,7 +1304,7 @@
     <dt>申請日時</dt><dd id="s-appdt"></dd>
     <dt>内容</dt><dd id="s-content"></dd>
     <dt>対象日</dt><dd id="s-date"></dd>
-    <dt>正しい時刻</dt><dd id="s-jissai"></dd>
+    <dt>時刻（現在→修正後）</dt><dd id="s-jissai"></dd>
     <dt>判定</dt><dd id="s-status"></dd>
     <div id="s-extra"></div>
     <dt>修正理由</dt><dd><div class="reason" id="s-reason"></div></dd>
@@ -1385,6 +1421,18 @@
   <div class="composer-field"><label>送信者</label><input type="text" id="dc-sender" placeholder="例：総務"></div>
   <div class="composer-field"><label>メッセージ内容</label><textarea id="dc-content" placeholder="伝言の内容を入力してください"></textarea></div>
   <div class="drawer-actions"><button class="go" id="dc-send">送信</button></div>
+</div>
+
+<!-- 2026-11-26新設：申請一覧・修正依頼共通の一括承認確認ダイアログ -->
+<div class="bulk-modal-backdrop" id="bulk-modal-backdrop">
+  <div class="bulk-modal">
+    <h3 id="bulk-modal-title"></h3>
+    <ul id="bulk-modal-list"></ul>
+    <div class="mbtns">
+      <button type="button" id="bulk-modal-cancel">やめる</button>
+      <button type="button" class="primary" id="bulk-modal-confirm">承認する</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1678,7 +1726,11 @@
       var btns = actionsFor(r.status, 'row').map(function(a){
         return '<button class="rb ' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
       }).join('');
+      // 2026-11-26新設：一括承認の対象（承認待・仮承認）だけチェックボックスを出す
+      var bulkable = isBulkable_(r.status);
+      if (bulkable) { tr.dataset.name = r.name; tr.dataset.detail = (r.yukyuKbn || '') + '・' + r.detail; }
       tr.innerHTML =
+        '<td class="ckcol">' + (bulkable ? '<input type="checkbox" class="rowck">' : '') + '</td>' +
         '<td class="mono">' + escapeHtml(r.appId) + '</td>' +
         '<td class="name">' + escapeHtml(r.name) + '</td>' +
         '<td>' + escapeHtml(r.yukyuKbn || '—') + '</td>' +
@@ -1692,6 +1744,7 @@
     });
     document.getElementById('emptystate').hidden = filtered.length > 0;
     document.getElementById('resultcount').textContent = filtered.length + ' 件（全' + ROWS.length + '件中）';
+    updateBulkBar_('shinsei');
   }
 
   document.getElementById('f-id').addEventListener('change', function(e){ state.id = e.target.value; render(); });
@@ -2122,6 +2175,14 @@
 
   function buildShuseiDetail(r){ return r.content + (r.addType ? '（' + r.addType + '）' : ''); }
 
+  // 2026-11-26新設：「修正後の時間だけでなく修正前（現在の記録）も見たい」との要望に対応。
+  // サーバー側（getCurrentDakokuTimeForShuusei_、コード.gs）が対象の打刻を一意に特定できた
+  // 時だけgenzaiTimeを返すため、無ければ従来通り修正後の時刻だけを表示する
+  function buildJikanCell_(r){
+    if (r.genzaiTime) return r.genzaiTime + ' → ' + (r.jissaiTime || '—');
+    return r.jissaiTime || '—';
+  }
+
   // 2026-10-21新設：承認済にしたのに打刻ログへ自動反映できなかった（K列が未処理のまま）行
   // だけを絞り込む（buildAutoResultBadge_と同じ判定基準）
   // 2026-10-21修正：ステータスを見ずに自動処理結果の文言だけで判定していたため、後から否認した
@@ -2178,12 +2239,15 @@
       var btns = actionsFor(r.status, 'row').map(function(a){
         return '<button class="rb ' + a[0] + '" data-act="' + a[1] + '" data-id="' + escapeHtml(r.appId) + '">' + a[2] + '</button>';
       }).join('');
+      var bulkable = isBulkable_(r.status);
+      if (bulkable) { tr.dataset.name = r.name; tr.dataset.detail = buildShuseiDetail(r); }
       tr.innerHTML =
+        '<td class="ckcol">' + (bulkable ? '<input type="checkbox" class="rowck">' : '') + '</td>' +
         '<td class="mono">' + escapeHtml(r.appId) + '</td>' +
         '<td class="name">' + escapeHtml(r.name) + '</td>' +
         '<td>' + escapeHtml(buildShuseiDetail(r)) + '</td>' +
         '<td class="mono">' + escapeHtml(r.taishouDate || '—') + '</td>' +
-        '<td class="mono">' + escapeHtml(r.jissaiTime || '—') + '</td>' +
+        '<td class="mono">' + escapeHtml(buildJikanCell_(r)) + '</td>' +
         '<td><span class="stamp ' + st[0] + '">' + st[1] + '</span></td>' +
         '<td>' + buildAutoResultBadge_(r) + '</td>' +
         '<td><div class="rowbtns">' + btns + '</div></td>';
@@ -2191,7 +2255,113 @@
     });
     document.getElementById('shusei-emptystate').hidden = filtered.length > 0;
     document.getElementById('shusei-resultcount').textContent = filtered.length + ' 件（全' + SHUSEI_ROWS.length + '件中）';
+    updateBulkBar_('shusei');
   }
+
+  // ── 一括承認（2026-11-26新設） ──────────────────────────
+  // 「承認済・否認は1件ずつ、承認だけまとめてできるようにしたい」という現場の声への対応。
+  // バックエンドは変更せず、既存の1件ずつ承認するAPI（updateShinseiStatus／
+  // updateShuuseiStatus）を選んだ件数ぶん順番に呼ぶだけにした。否認は理由確認が
+  // 必要なことが多いため対象外（承認のみ）
+  var BULK_GROUPS = {
+    shinsei: { tbodyId:'tbody',        headCkId:'shinsei-headck', barId:'shinsei-bulkbar', action:'updateShinseiStatus' },
+    shusei:  { tbodyId:'shusei-tbody', headCkId:'shusei-headck',  barId:'shusei-bulkbar',  action:'updateShuuseiStatus' },
+  };
+  function isBulkable_(status){ return status === '承認待' || status === '仮承認'; }
+  function bulkRows_(group){
+    var tbody = document.getElementById(BULK_GROUPS[group].tbodyId);
+    return tbody ? Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function(tr){ return tr.querySelector('.rowck'); }) : [];
+  }
+  function updateBulkBar_(group){
+    var cfg = BULK_GROUPS[group];
+    var rows = bulkRows_(group);
+    var checkedRows = rows.filter(function(tr){ return tr.querySelector('.rowck').checked; });
+    rows.forEach(function(tr){ tr.classList.toggle('ckselected', tr.querySelector('.rowck').checked); });
+    var headCk = document.getElementById(cfg.headCkId);
+    if (headCk) {
+      headCk.checked = rows.length > 0 && checkedRows.length === rows.length;
+      headCk.indeterminate = checkedRows.length > 0 && checkedRows.length < rows.length;
+    }
+    var bar = document.getElementById(cfg.barId);
+    if (bar) {
+      bar.classList.toggle('show', checkedRows.length > 0);
+      var cntEl = bar.querySelector('.cnt'); if (cntEl) cntEl.textContent = checkedRows.length + '件';
+    }
+  }
+  Object.keys(BULK_GROUPS).forEach(function(group){
+    var cfg = BULK_GROUPS[group];
+    var tbody = document.getElementById(cfg.tbodyId);
+    var headCk = document.getElementById(cfg.headCkId);
+    if (tbody) {
+      tbody.addEventListener('change', function(e){
+        if (e.target.classList.contains('rowck')) updateBulkBar_(group);
+      });
+    }
+    if (headCk) {
+      headCk.addEventListener('change', function(){
+        bulkRows_(group).forEach(function(tr){ tr.querySelector('.rowck').checked = headCk.checked; });
+        updateBulkBar_(group);
+      });
+    }
+  });
+  document.querySelectorAll('.bulk-clear').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var group = btn.dataset.group;
+      bulkRows_(group).forEach(function(tr){ tr.querySelector('.rowck').checked = false; });
+      updateBulkBar_(group);
+    });
+  });
+
+  var bulkCurrentGroup = null, bulkCurrentIds = [];
+  document.querySelectorAll('.bulk-approve').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if (isPastYearView) { showToast('過去の年度は閲覧専用です。', true); return; }
+      var group = btn.dataset.group;
+      var checkedRows = bulkRows_(group).filter(function(tr){ return tr.querySelector('.rowck').checked; });
+      if (!checkedRows.length) return;
+      bulkCurrentGroup = group;
+      bulkCurrentIds = checkedRows.map(function(tr){ return tr.dataset.id; });
+      document.getElementById('bulk-modal-title').textContent = checkedRows.length + '件をまとめて承認します';
+      document.getElementById('bulk-modal-list').innerHTML = checkedRows.map(function(tr){
+        return '<li><b>' + escapeHtml(tr.dataset.id) + '</b>　' + escapeHtml(tr.dataset.name || '') + '　' + escapeHtml(tr.dataset.detail || '') + '</li>';
+      }).join('');
+      document.getElementById('bulk-modal-backdrop').classList.add('show');
+    });
+  });
+  document.getElementById('bulk-modal-cancel').addEventListener('click', function(){
+    document.getElementById('bulk-modal-backdrop').classList.remove('show');
+  });
+  document.getElementById('bulk-modal-confirm').addEventListener('click', function(){
+    var confirmBtn = this;
+    var group = bulkCurrentGroup;
+    var cfg = BULK_GROUPS[group];
+    var ids = bulkCurrentIds.slice();
+    if (!cfg || !ids.length) return;
+    confirmBtn.disabled = true; confirmBtn.textContent = '処理中…';
+    var okCount = 0, failMsgs = [];
+    function step(i){
+      if (i >= ids.length) {
+        confirmBtn.disabled = false; confirmBtn.textContent = '承認する';
+        document.getElementById('bulk-modal-backdrop').classList.remove('show');
+        var msg = okCount + '件を承認しました。';
+        if (failMsgs.length) msg += '　' + failMsgs.length + '件失敗：' + failMsgs.join('／');
+        showToast(msg, failMsgs.length > 0);
+        if (group === 'shinsei') loadShinseiList(); else loadShuuseiList();
+        return;
+      }
+      var id = ids[i];
+      fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: cfg.action, token: idToken, appId: id, status: '承認済' })
+      }).then(function(res){ return res.json(); })
+        .then(function(data){
+          if (data.success) okCount++; else failMsgs.push(id + '（' + (data.message || '失敗') + '）');
+        })
+        .catch(function(){ failMsgs.push(id + '（通信エラー）'); })
+        .then(function(){ step(i + 1); });
+    }
+    step(0);
+  });
 
   document.getElementById('fs-name').addEventListener('change', function(e){ sState.name = e.target.value; renderShusei(); });
   document.getElementById('fs-content').addEventListener('change', function(e){ sState.content = e.target.value; renderShusei(); });
@@ -2217,7 +2387,7 @@
     document.getElementById('s-appdt').textContent = r.appDateTime || '—';
     document.getElementById('s-content').textContent = buildShuseiDetail(r);
     document.getElementById('s-date').textContent = r.taishouDate || '—';
-    document.getElementById('s-jissai').textContent = r.jissaiTime || '—';
+    document.getElementById('s-jissai').textContent = buildJikanCell_(r);
     var st = STAMP[r.status] || ['pending', escapeHtml(r.status || '?')];
     document.getElementById('s-status').innerHTML = '<span class="stamp ' + st[0] + '">' + st[1] + '</span>';
     document.getElementById('s-reason').textContent = r.riyu || '（記入なし）';
