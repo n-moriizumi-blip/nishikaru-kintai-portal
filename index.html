@@ -1342,8 +1342,10 @@
   <div class="composer-field composer-check"><label><input type="checkbox" id="m-f-dokuji"> 独自ルール対象</label></div>
   <div class="composer-field composer-check"><label><input type="checkbox" id="m-f-testsanka"> テスト参加</label></div>
   <div class="composer-field"><label>本人宛Webhook URL</label><input type="text" id="m-f-webhook" placeholder="Google ChatのWebhook URL"></div>
-  <div class="composer-field"><label>NFCタグID</label><div class="composer-readonly" id="m-f-nfc">—</div>
-    <span class="composer-hint">タブレットの隠し画面「NFCタグ読み取りモード」で別途登録してください。</span></div>
+  <div class="composer-field"><label>NFCタグID</label>
+    <select id="m-f-nfc-select"></select>
+    <input type="text" id="m-f-nfc-manual" hidden placeholder="例：04b696ba302390" style="margin-top:6px;">
+    <span class="composer-hint">タブレットの隠し画面「NFCタグ読み取りモード」で読み取ると、下の一覧に候補として出てきます。見当たらない場合は「直接入力する」を選んでください。入力ミスがあると、その方が打刻できなくなります。</span></div>
   <div class="composer-field"><label>備考</label><textarea id="m-f-biko"></textarea></div>
   <!-- 2026-10-25新設：開いた直後は閲覧専用（各入力欄disabled）にし、「編集する」ボタンを
        押すまで書き換えられないようにした（誤って書き換えてしまう事故の防止、ユーザー要望） -->
@@ -2737,6 +2739,43 @@
 
   var mDrawer = document.getElementById('m-drawer'), mBackdrop = document.getElementById('m-backdrop');
   var mEditingEmail = null; // null＝新規追加モード、それ以外＝編集対象のメールアドレス
+
+  // ── NFCタグID選択欄（2026-11-28新設）────────────────────────
+  // 「NFCタグ読み取り」シートの直近スキャンから選ぶ方式にして、14桁の16進数文字列を
+  // 手入力させることによる入力ミスを減らす（ユーザー要望）。見当たらない場合のための
+  // 手入力欄も残す。実際に値が変わる時だけ保存時に確認ダイアログを出す（下記m-save参照）
+  var mOriginalNfcId = '';
+  var NFC_RECENT_SCANS = null; // {datetime, nfcId}[]（新しい順）
+  function loadNfcRecentScans_(){
+    return fetch(portalApiUrl_('portalNfcRecentScans')).then(function(res){ return res.json(); })
+      .then(function(data){ NFC_RECENT_SCANS = (data.success && data.rows) ? data.rows : []; })
+      .catch(function(){ NFC_RECENT_SCANS = []; });
+  }
+  function buildNfcSelectOptions_(currentNfcId){
+    var sel = document.getElementById('m-f-nfc-select');
+    var prevValue = sel.value; // 読み込み完了までの間に既に選び直されていた場合は尊重する
+    var opts = ['<option value="__keep__">' + (currentNfcId ? '現在の値のまま（' + escapeHtml(currentNfcId) + '）' : '未登録のまま') + '</option>'];
+    opts.push('<option disabled>── 最近読み取ったタグ ──</option>');
+    (NFC_RECENT_SCANS || []).forEach(function(s){
+      opts.push('<option value="' + escapeHtml(s.nfcId) + '">' + escapeHtml(s.datetime) + '　' + escapeHtml(s.nfcId) + '</option>');
+    });
+    opts.push('<option disabled>── その他 ──</option>');
+    opts.push('<option value="__manual__">直接入力する…</option>');
+    sel.innerHTML = opts.join('');
+    var hasPrevValue = prevValue && prevValue !== '__keep__' &&
+      Array.prototype.slice.call(sel.options).some(function(o){ return o.value === prevValue; });
+    sel.value = hasPrevValue ? prevValue : '__keep__';
+    document.getElementById('m-f-nfc-manual').hidden = (sel.value !== '__manual__');
+  }
+  document.getElementById('m-f-nfc-select').addEventListener('change', function(){
+    document.getElementById('m-f-nfc-manual').hidden = (this.value !== '__manual__');
+  });
+  function resolveNfcIdFromForm_(){
+    var sel = document.getElementById('m-f-nfc-select').value;
+    if (sel === '__keep__') return mOriginalNfcId;
+    if (sel === '__manual__') return document.getElementById('m-f-nfc-manual').value.trim();
+    return sel;
+  }
   function fillShainForm_(r){
     document.getElementById('m-f-email').value = r ? r.email : '';
     document.getElementById('m-f-email').disabled = !!r; // 既存社員は主キーのため変更不可
@@ -2751,15 +2790,27 @@
     document.getElementById('m-f-dokuji').checked = r ? !!r.isDokujirule : false;
     document.getElementById('m-f-testsanka').checked = r ? !!r.isTestSanka : false;
     document.getElementById('m-f-webhook').value = r ? (r.webhook || '') : '';
-    document.getElementById('m-f-nfc').textContent = r && r.nfcId ? r.nfcId : '（未登録）';
     document.getElementById('m-f-biko').value = r ? (r.biko || '') : '';
+    // 2026-11-28新設：NFCタグIDは「最近読み取ったタグ」一覧から選ぶ方式（誤入力防止、
+    // ユーザー要望）。一覧の読み込みは非同期のため、まず「現在の値のまま」だけの状態で
+    // 表示し、読み込み完了後にbuildNfcSelectOptions_で選択肢を差し替える
+    mOriginalNfcId = r ? (r.nfcId || '') : '';
+    const nfcSel = document.getElementById('m-f-nfc-select');
+    nfcSel.innerHTML = '<option value="__keep__">' +
+      (mOriginalNfcId ? '現在の値のまま（' + escapeHtml(mOriginalNfcId) + '）' : '未登録のまま') +
+      '</option><option disabled>読み込み中…</option>';
+    const nfcManual = document.getElementById('m-f-nfc-manual');
+    nfcManual.hidden = true;
+    nfcManual.value = '';
+    loadNfcRecentScans_().then(function(){ buildNfcSelectOptions_(mOriginalNfcId); });
   }
   // 2026-10-25新設：既存社員の情報を誤って書き換えてしまう事故を防ぐため、ドロワーを開いた
   // 直後は各入力欄をdisabledにし（メールアドレスは既存の仕組みでそのまま制御）、「編集する」
   // ボタンを押すまで書き換えられないようにする。新規追加（openShainComposer）は元々データが
   // 空で誤って既存値を壊すリスクが無いため、この対象外（最初から編集可能）
   var M_EDITABLE_FIELD_IDS = ['m-f-name','m-f-furigana','m-f-koyou','m-f-teijistart','m-f-teijiend',
-    'm-f-nyusha','m-f-taishoku','m-f-workdays','m-f-dokuji','m-f-testsanka','m-f-webhook','m-f-biko'];
+    'm-f-nyusha','m-f-taishoku','m-f-workdays','m-f-dokuji','m-f-testsanka','m-f-webhook','m-f-biko',
+    'm-f-nfc-select','m-f-nfc-manual'];
   function setShainEditable_(editable){
     M_EDITABLE_FIELD_IDS.forEach(function(id){ var el = document.getElementById(id); if (el) el.disabled = !editable; });
     document.getElementById('m-edit-start').classList.toggle('hidden', editable);
@@ -2799,6 +2850,18 @@
     var name  = document.getElementById('m-f-name').value.trim();
     if (!email || email.indexOf('@') === -1) { showToast('メールアドレスの形式が正しくありません。', true); return; }
     if (!name) { showToast('氏名は必須です。', true); return; }
+    // 2026-11-28新設：NFCタグIDが実際に変わる場合（既存社員の編集時のみ）、誤って別の人の
+    // タグを割り当てたり読み間違えたりしていないか、最後にもう一度確認する
+    var finalNfcId = resolveNfcIdFromForm_();
+    if (mEditingEmail && finalNfcId !== mOriginalNfcId) {
+      var nfcOk = confirm(
+        'NFCタグIDを変更します。\n\n' +
+        '変更前：' + (mOriginalNfcId || '（未登録）') + '\n' +
+        '変更後：' + (finalNfcId || '（未登録）') + '\n\n' +
+        'この社員のタブレットでの打刻に使われます。別の人のタグや読み間違いでないか確認のうえ、よろしければ「OK」を押してください。'
+      );
+      if (!nfcOk) return;
+    }
     var payload = {
       action: mEditingEmail ? 'updateShainMaster' : 'createShainMaster',
       token: idToken,
@@ -2815,6 +2878,7 @@
       isTestSanka: document.getElementById('m-f-testsanka').checked,
       webhook: document.getElementById('m-f-webhook').value.trim(),
       biko: document.getElementById('m-f-biko').value.trim(),
+      nfcId: finalNfcId,
     };
     mSaving = true;
     var btn = document.getElementById('m-save'); btn.disabled = true;
